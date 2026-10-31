@@ -147,3 +147,12 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local Rewards build and verification outputs
+functions/lib/
+.emulator-cache/
+.firebase-config/
+.emulator-state/
+.npm-cache/
+test-results/
+playwright-report/

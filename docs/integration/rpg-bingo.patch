@@ -1,0 +1,26 @@
+diff --git a/functions/src/embedded-service.ts b/functions/src/embedded-service.ts
+index 7015b0c..35aca66 100644
+--- a/functions/src/embedded-service.ts
++++ b/functions/src/embedded-service.ts
+@@ -58,7 +58,7 @@ export class EmbeddedService {
+     });
+     const run = (await ref.get()).data() as EmbeddedRun;
+     if (!run.offer) {
+-      const offer = await this.gateway.draw({ ...c, playerId: run.offerPlayerId });
++      const offer = await this.gateway.draw(c);
+       requireValue(id(offer.id) && !!offer.reward && typeof offer.reward.name === 'string' && typeof offer.reward.qualifyingRoll === 'string', 'Rewards returned an invalid offer.');
+       await this.db.runTransaction(async tx => {
+         const current = (await tx.get(ref)).data() as EmbeddedRun;
+diff --git a/functions/src/integration-gateway.ts b/functions/src/integration-gateway.ts
+index bc57d0d..447356d 100644
+--- a/functions/src/integration-gateway.ts
++++ b/functions/src/integration-gateway.ts
+@@ -35,7 +35,7 @@ export class RemoteGateway implements IntegrationGateway {
+   context(c: CentralContext) { return this.request<CentralContext>('hub', { action: 'context', sessionId: c.sessionId, playerId: c.playerId, runId: c.runId }); }
+   activity(c: CentralContext, eventId: string) { return this.request('hub', { action: 'activity', sessionId: c.sessionId, playerId: c.playerId, runId: c.runId, eventId }); }
+   draw(c: CentralContext) {
+-    return this.request<RewardOffer>('rewards', { action: 'draw', sessionId: c.sessionId, playerId: c.playerId, runId: c.runId, requestId: eventId('offer', c.runId) });
++    return this.request<RewardOffer>('rewards', { action: 'draw', sessionId: c.sessionId, playerId: c.playerId, runId: c.runId, requestId: eventId(`offer/${c.playerId}`, c.runId) });
+   }
+   settle(c: CentralContext, offerId: string, winnerIds: string[]) {
+     return this.request<{ receipt: string }>('rewards', { action: 'settle', sessionId: c.sessionId, runId: c.runId, offerId, winnerIds, requestId: eventId('settle', c.runId) });

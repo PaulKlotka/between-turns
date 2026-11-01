@@ -1,118 +1,54 @@
 import { test, expect } from '@playwright/test';
-import jsQR from 'jsqr';
 
-test('reward use locks other rewards and undo expires after 15 seconds, including after reload', async ({ page }) => {
+test('standalone Rewards sends players to Between Turns without starting its own login', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', r => requests.push(r.url()));
   await page.goto('/');
-  await expect(page.getByRole('status')).toBeEmpty();
-  await page.getByLabel('Your player name').fill('Timer player');
-  await page.getByLabel('Session name', { exact: true }).fill('Undo timer');
-  await page.getByRole('button', { name: 'Create session' }).click();
-  await expect(page.getByRole('heading', { name: 'Undo timer', exact: true })).toBeVisible();
-  await page.goto('http://127.0.0.1:5174/connect');
-  await page.getByRole('button', { name: 'Continue to game' }).click();
-  await expect(page).toHaveURL('http://127.0.0.1:5174/');
-  for (let i = 0; i < 2; i++) {
-    await page.getByRole('button', { name: 'Draw reward' }).click();
-    await page.getByRole('button', { name: 'Record a win' }).click();
-  }
-  await page.getByRole('link', { name: 'Open RPG Rewards' }).click();
-  const use = page.getByRole('button', { name: 'Use reward', exact: true });
-  const undo = page.getByRole('button', { name: /Undo use/ });
-  await expect(use).toHaveCount(2);
-  await use.first().click();
-  await expect(undo).toContainText(/\d+s/);
-  await expect(use).toBeDisabled();
-  await undo.click();
-  await expect(use).toHaveCount(2);
-  await expect(use.first()).toBeEnabled();
-  await expect(use.last()).toBeEnabled();
-  await use.first().click();
-  await expect(undo).toBeEnabled();
-  await page.reload();
-  await expect(undo).toBeVisible();
-  await expect(use).toBeDisabled();
-  await expect(undo).toHaveCount(0, { timeout: 20_000 });
-  await expect(use).toBeEnabled();
-  await expect(page.locator('.state-pill', { hasText: 'Consumed' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Between Turns' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Create session|Join session/ })).toHaveCount(0);
+  expect(requests.some(url => url.includes('identitytoolkit'))).toBe(false);
 });
 
-test('guest identity, shared membership, game handoff, rewards, undo and phone layouts', async ({ page, browser }) => {
-  const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
-  await expect(page.getByRole('status')).toBeEmpty({ timeout: 30_000 });
-  await page.getByLabel('Your player name').fill('Paul');
-  await page.getByLabel('Session name', { exact: true }).fill('The Drift crew');
-  await page.getByLabel('Shared', { exact: true }).check();
-  await page.getByRole('button', { name: 'Create session' }).click();
-  await expect(page.getByRole('heading', { name: 'The Drift crew', exact: true })).toBeVisible();
-  const code = await page.locator('#copy-code strong').innerText();
-  const qr = page.getByRole('img', { name: 'QR code to join The Drift crew' });
-  await expect(qr).toBeVisible();
-  // Decode the actual rendered image so this verifies a scannable invitation, not just a link.
-  const pixels = await qr.evaluate(async (element: HTMLImageElement) => {
-    await element.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = element.naturalWidth; canvas.height = element.naturalHeight;
-    const context = canvas.getContext('2d')!;
-    context.drawImage(element, 0, 0);
-    return { data: Array.from(context.getImageData(0, 0, canvas.width, canvas.height).data), width: canvas.width, height: canvas.height };
+test('embedded inventory, owner use and undo, history privacy, reconnect, and narrow layouts', async ({ page }) => {
+  let consumedAt: number | null = null;
+  let revoked = false;
+  const requests: Record<string, unknown>[] = [];
+  const reward = { id: 'test', name: 'A little luck', qualifyingRoll: 'Acrobatics check' };
+  const view = () => ({ serverNow: Date.now(), inventory: [
+    { id: 'first', playerId: 'alpha', playerName: 'Alpha', gameId: 'rpg-bingo', offerId: 'o', reward, awardedAt: Date.now(), consumedAt },
+    { id: 'second', playerId: 'alpha', playerName: 'Alpha', gameId: 'rpg-bingo', offerId: 'p', reward, awardedAt: Date.now(), consumedAt: null },
+  ], history: [{ id: 'first', playerName: 'Alpha', reward, gameId: 'rpg-bingo', awardedAt: Date.now() }, { id: 'other', playerName: 'Beta', reward, gameId: 'rpg-bingo', awardedAt: Date.now() }] });
+  await page.route('http://127.0.0.1:5173/embeddedApi', async route => {
+    const input = route.request().postDataJSON(); requests.push(input);
+    if (revoked) { await route.fulfill({status:403,json:{error:{code:'permission-denied',message:'You are no longer in this session.'}}}); return; }
+    if (input.action === 'begin') { await route.fulfill({json:{result:{credential:'x'.repeat(43)}}}); return; }
+    if (input.action === 'consume') consumedAt = input.consumed ? Date.now() : null;
+    await route.fulfill({json:{result:view()}});
   });
-  const decoded = jsQR(Uint8ClampedArray.from(pixels.data), pixels.width, pixels.height);
-  expect(decoded).not.toBeNull();
-  const invitation = decoded!.data;
-  expect(invitation).toBe(`http://127.0.0.1:5173/?join=${code}`);
-  await expect(page.getByRole('link', { name: 'Open join link', exact: true })).toHaveAttribute('href', invitation);
-  const friendContext = await browser.newContext();
-  const friend = await friendContext.newPage();
-  try {
-    await friend.goto(invitation);
-    await expect(friend.getByRole('status')).toContainText('Party invitation ready');
-    await expect(friend.getByLabel('Join code', { exact: true })).toHaveValue(code);
-    await friend.getByLabel('Your player name').fill('Zintra');
-    await friend.getByRole('button', { name: 'Join session', exact: true }).click();
-    await expect(friend.getByRole('heading', { name: 'The Drift crew', exact: true })).toBeVisible();
-    await expect(friend).toHaveURL('http://127.0.0.1:5173/');
-    await page.goto('http://127.0.0.1:5174/connect');
-    await expect(page.getByRole('button', { name: 'Continue to game' })).toBeEnabled({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Continue to game' }).click();
-    await expect(page).toHaveURL('http://127.0.0.1:5174/');
-    await expect(page.getByText('Connected as')).toContainText('Paul');
-    await page.getByRole('button', { name: 'Draw reward' }).click();
-    const offerName = await page.locator('section h2').innerText();
-    await page.getByRole('button', { name: 'Record a win' }).click();
-    await page.getByRole('button', { name: 'Record a win' }).click();
-    await page.getByRole('link', { name: 'Open RPG Rewards' }).click();
-    await expect(page.locator('.reward-card')).toHaveCount(1, { timeout: 30_000 });
-    await expect(page.locator('.reward-card h3')).toHaveText(offerName);
-    await page.getByRole('button', { name: 'Use reward', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Undo use' })).toBeVisible();
-    await page.reload();
-    await expect(page.getByRole('button', { name: 'Undo use' })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Undo use' }).click();
-    await expect(page.getByRole('button', { name: 'Use reward', exact: true })).toBeVisible();
-    await expect(friend.locator('.reward-card')).toHaveCount(0);
-    await friend.getByRole('tab', { name: 'Session winners' }).click();
-    await expect(friend.locator('.reward-card')).toHaveCount(1, { timeout: 15_000 });
-    await expect(friend.locator('.reward-card')).toContainText('Paul');
-    await expect(friend.getByRole('button', { name: 'Use reward' })).toHaveCount(0);
-    for (const width of [1440, 390, 320]) {
-      await page.setViewportSize({ width, height: 950 });
-      await expect(page.getByRole('button', { name: 'Use reward', exact: true })).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-      expect((await page.locator('.reward-info').boundingBox())!.width).toBeGreaterThan(150);
-      await page.screenshot({ path: `test-results/rewards-${width}.png`, fullPage: true });
-    }
-    // Switching sessions preserves membership and keeps both reward pools separate.
-    await page.locator('#session-forms summary').click();
-    await page.getByLabel('Session name', { exact: true }).fill('Solo side quest');
-    await page.getByLabel('Solo', { exact: true }).check();
-    await page.getByRole('button', { name: 'Create session' }).click();
-    await expect(page.getByRole('heading', { name: 'Solo side quest', exact: true })).toBeVisible();
-    await expect(page.getByRole('img', { name: /QR code to join/ })).toHaveCount(0);
-    await expect(page.locator('.reward-card')).toHaveCount(0);
-    await page.getByLabel('Current session', { exact: true }).selectOption({ label: 'The Drift crew' });
-    await expect(page.locator('.reward-card')).toHaveCount(1);
-    expect(errors).toEqual([]);
-  } finally { await friendContext.close(); }
+  await page.goto('http://127.0.0.1:5180/test');
+  const frame = page.frameLocator('iframe');
+  await expect(frame.getByRole('heading', { name: 'My Rewards', exact: true })).toBeVisible();
+  const use = frame.getByRole('button', { name: 'Use reward', exact: true });
+  await expect(use).toHaveCount(2);
+  await use.first().click();
+  await expect(frame.getByRole('button', { name: /Undo use/ })).toBeVisible();
+  await expect(use).toBeDisabled();
+  await frame.getByRole('button', { name: /Undo use/ }).click();
+  await expect(use.first()).toBeEnabled();
+  await page.getByRole('button', {name:'History',exact:true}).click();
+  await expect(frame.getByRole('heading', {name:'Session History',exact:true})).toBeVisible();
+  await expect(frame.getByText('Beta', {exact:true})).toBeVisible();
+  await expect(frame.getByText(/Available|Consumed|Used/, {exact:true})).toHaveCount(0);
+  await expect(frame.getByRole('button', {name:'Use reward',exact:true})).toHaveCount(0);
+  for (const width of [1440,390,320]) {
+    await page.setViewportSize({width,height:900});
+    const noOverflow = await page.frames()[1].evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+    expect(noOverflow).toBe(true);
+  }
+  await page.getByRole('button', {name:'Mine',exact:true}).click();
+  revoked = true;
+  await expect(frame.getByText('You are no longer in this session.')).toBeVisible();
+  await expect(frame.getByRole('button', {name:'Use reward',exact:true})).toHaveCount(0);
+  expect(requests.filter(r=>r.action==='consume')).toHaveLength(2);
+  expect(requests.every(r=>!('sessionId' in r)&&!('playerId' in r))).toBe(true);
 });

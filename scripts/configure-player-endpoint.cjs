@@ -16,10 +16,10 @@ async function configure() {
   if (!account) throw new Error('Sign in first: node scripts/firebase.mjs login');
   setRefreshToken(account.tokens.refresh_token);
   const client = new Client({ urlPrefix: 'https://run.googleapis.com', auth: true });
-  const name = `projects/${projectId}/locations/us-central1/services/playercommand`;
+  const name = `projects/${projectId}/locations/us-central1/services/embeddedapi`;
   // The service-level v1 annotation avoids recreating a Cloud Functions-managed revision.
   const regional = new Client({ urlPrefix: 'https://us-central1-run.googleapis.com', auth: true });
-  const resource = `/apis/serving.knative.dev/v1/namespaces/${projectId}/services/playercommand`;
+  const resource = `/apis/serving.knative.dev/v1/namespaces/${projectId}/services/embeddedapi`;
   const current = (await regional.get(resource)).body;
   if (current.metadata.annotations?.['run.googleapis.com/invoker-iam-disabled'] !== 'true') {
     const metadata = current.metadata;
@@ -40,6 +40,6 @@ async function configure() {
     const check = await client.get(`/v2/projects/${projectId}/locations/us-central1/services/${service}`);
     if (check.body.invokerIamDisabled) throw new Error(`${service} unexpectedly permits public invocation.`);
   }
-  console.log('Player HTTP endpoint enabled; Firebase Authentication and App Check enforced. Game API and cleanup remain private.');
+  console.log('Embedded Rewards HTTP endpoint enabled; Server-bound Between Turns connection credentials enforced. Game API and cleanup remain private.');
 }
 configure().catch(error => { console.error(error.message); process.exitCode = 1; });

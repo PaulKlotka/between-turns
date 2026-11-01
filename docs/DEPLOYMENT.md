@@ -1,40 +1,41 @@
-# Future Firebase deployment
+# Rewards deployment
 
-This is a preparation guide, not a record of a deployment. No Firebase project has been provisioned. Do not reuse the RPG Bingo project or its service accounts, credentials or project aliases.
+Build and verify locally before deploying. The integration updates were deployed to the existing three Firebase projects on November 1, 2026. Existing runtime identities were retained, scoped backend invocation was configured, and browser transport was verified.
 
-## New project configuration
+## Configuration
 
-1. Create a dedicated Firebase project when deployment is authorized. Enable billing as needed for Cloud Functions and Cloud Scheduler, register a web app, and create Firestore in Native mode. The functions are configured for `us-central1`; choose the database location deliberately before creation.
-2. Enable Anonymous Authentication in the new project. This becomes the central identity authority for future games. Register the Rewards hosting domain in authorized domains.
-3. Register the Rewards web app for reCAPTCHA Enterprise App Check and allow its exact domain. Set up quotas and billing appropriate to expected usage.
-4. Copy `.env.example` to an ignored `.env.production.local`. Set `VITE_USE_FIREBASE_EMULATORS=false`, replace every demo Firebase value with the new project's public config, and set `VITE_FIREBASE_APPCHECK_SITE_KEY`. The production UI refuses to initialize without the necessary config. These Vite values are public configuration, never service-account credentials.
-5. Copy `functions/.env.example` to the appropriate ignored `functions/.env.PROJECT_ID`. Set `GAME_API_AUDIENCE` to the exact gameApi function URL and configure `GAME_CLIENTS_JSON` with distinct registered game runtime service-account emails and exact HTTPS callback URLs. With no registered clients, the backend game API fails closed. Do not register the local demo game in production.
-6. Use an appropriate dedicated function runtime service account with Firestore access and no project-wide owner/editor access. Configure its service account in the function options before deployment if the project default is broader than intended. The cleanup function also needs permission to delete the Rewards documents. Games need invocation access to gameApi, not direct access to the Rewards database.
+Use the existing dedicated runtime identities. Configure the Rewards backend:
 
-## Validate and deploy when authorized
-
-```sh
-npm ci
-npm --prefix functions ci
-npm test
-npm run verify:emulators
-npm run build
-# Only after separately authorizing creation/configuration/deployment:
-npx firebase deploy --only firestore:rules,firestore:indexes,functions,hosting --project YOUR_NEW_PROJECT_ID
+```dotenv
+REWARDS_RUNTIME_SERVICE_ACCOUNT=rewards-runtime@rpg-rewards-paul.iam.gserviceaccount.com
+BETWEEN_TURNS_API_URL=https://REGION-HUB_PROJECT.cloudfunctions.net/integrationApi
+GAME_API_AUDIENCE=https://REGION-REWARDS_PROJECT.cloudfunctions.net/gameApi
+GAME_CLIENTS_JSON={"rpg-bingo":{"serviceAccount":"bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com"}}
+REWARDS_BROWSER_ORIGINS=https://rpg-rewards-paul.web.app
 ```
 
-No `.firebaserc` alias is committed; always supply an explicit new project ID. Check the production build contains no demo project identifiers or loopback endpoints in its active configuration. Source code necessarily includes emulator branches, but production selection must be false. Never deploy `demo/game-server.ts`.
+Set the frontend `VITE_BETWEEN_TURNS_ORIGINS=https://between-turns-paul.web.app`. These are endpoint URLs, origins, and service-account identifiers; no private keys belong in frontend configuration.
 
-gameApi is deployed private. Grant `roles/run.invoker` on its Cloud Run service to the registered game service accounts. Set their runtime permissions to obtain ID tokens as themselves. Match the configured audience to the exact endpoint they call. Keep the player callable accessible through the Firebase SDK; its own handler enforces Authentication and App Check. Verify allowed and rejected calls after deployment.
+Register `rpg-rewards` as the hub's sole `kind:rewards` app with its runtime service account, exact origin, and `embedUrl:https://rpg-rewards-paul.web.app/embed`. Register Bingo's backend separately. Configure Bingo's existing `BETWEEN_TURNS_API_URL` and `REWARDS_GAME_API_URL` variables.
 
-## Cloud acceptance checks
+Grant the Rewards runtime identity invoker access only to the hub integration API. Grant the Bingo runtime identity invoker access to the hub integration API and Rewards game API. Keep both backend integration APIs private. Application handlers also validate service-account tokens against the configured registry.
 
-- Verify guest creation and reload persistence on the actual hosting origin, including App Check enforcement.
-- Verify shared joining and owner-only consume/undo with separate devices.
-- Verify a real registered backend OIDC caller can draw and award, and a browser guest token or unregistered service account cannot.
-- Verify cross-origin handoff with an HTTPS allowlisted callback and game-side state validation.
-- Verify hourly cleanup is scheduled and expiry blocks use before deletion.
-- Verify billing alerts, runtime IAM and quotas. Watch session-member and history sizes; the first release reads the current session's entire award history rather than paginating it.
-- A real-game integration, existing-session migration, and account-linking UI are separate work. No changes to RPG Bingo are part of this repository.
+Deploy the hub changes from the checked patch before using Rewards: it must validate `runId` and `gameId` on context requests from the registered Rewards service. Hosting must permit Rewards and Bingo in `frame-src`. Rewards permits the exact hub origin in `frame-ancestors`.
 
-Local emulators cannot validate cloud IAM, real OIDC caller permissions, reCAPTCHA Enterprise, billing, deployed domain behavior or the live scheduler. Those checks remain necessary when deployment is authorized.
+## Release
+
+1. Apply and review the sibling source patches described in `integration/README.md`.
+2. Run `npm test`, `npm run build`, `npm run verify:emulators`, and `npm run test:browser`. Build/typecheck the patched hub and Bingo repositories as well.
+3. Deploy configured backend services and Firestore rules. All browser Firestore access remains denied.
+4. Deploy Hosting. `/embeddedApi` must rewrite to the browser function before the SPA fallback.
+5. Configure HTTP invocation for `embeddedApi`. The existing `scripts/configure-player-endpoint.cjs` now targets this function. It configures the service-level invocation setting without changing organization sharing policy; backend-only endpoints stay private. The browser function authorizes opaque credentials bound to exchanged hub context. The retired player callable refuses standalone commands.
+6. Verify the actual hub/grant exchange and a complete Bingo game with two guests, then inventory use/undo, history, refresh, navigation, late join, departure and expiry.
+7. Mark Bingo ready in the hub only after this verification passes.
+
+`npm run deploy` builds Rewards, deploys its configured resources and runs the browser-invocation configuration script. It does not deploy the sibling source repositories. Check the Firebase CLI's project selection and existing function list before using it.
+
+## Data compatibility
+
+The adapter uses the same `centralSessions`, `centralConnections`, `centralReceipts` and `centralPlayerReceipts` formats and deterministic offer/award/settlement IDs as the integrated copy inside Bingo. Historical central award records remain readable. Legacy standalone sessions are not imported. Access to records is always gated by current hub membership and expiry; database retention does not confer access.
+
+`maintainCentralRewards` retries durable activity and removes expired opaque browser connections. It also drains the earlier adapter's pending activity records. Legacy standalone cleanup remains only to remove old records. No independent Rewards session clock is used for new central inventory.

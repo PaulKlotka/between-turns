@@ -1,0 +1,7 @@
+<!doctype html><style>body{margin:0;padding:22px;box-sizing:border-box}iframe{width:100%;height:90vh;border:0}</style><button id="history">History</button><button id="mine">Mine</button><iframe title="Rewards" src="http://127.0.0.1:5173/embed?btVersion=1&btNonce=test-nonce&btParentOrigin=http%3A%2F%2F127.0.0.1%3A5180"></iframe><script>
+    const f=document.querySelector('iframe');
+    window.addEventListener('message',e=>{if(e.source===f.contentWindow&&e.origin==='http://127.0.0.1:5173'&&e.data.type==='ready')f.contentWindow.postMessage({channel:'between-turns',version:1,type:'connect',nonce:'test-nonce',grant:'test-grant',expiresAt:Date.now()+60000},e.origin)});
+    history.onclick=()=>{};
+    document.getElementById('history').onclick=()=>f.contentWindow.postMessage({channel:'between-turns',version:1,type:'rewards-view',nonce:'test-nonce',view:'history'},'http://127.0.0.1:5173');
+    document.getElementById('mine').onclick=()=>f.contentWindow.postMessage({channel:'between-turns',version:1,type:'rewards-view',nonce:'test-nonce',view:'inventory'},'http://127.0.0.1:5173');
+  </script>

@@ -156,3 +156,5 @@ functions/lib/
 .npm-cache/
 test-results/
 playwright-report/
+
+.integration-work/

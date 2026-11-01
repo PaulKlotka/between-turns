@@ -12,8 +12,8 @@ test('HTTP boundaries require a guest for player commands and backend identity f
   assert.equal(auth.status, 200);
   const { idToken } = await auth.json() as { idToken: string };
   const create = await post('playerCommand', { data: { action: 'create', kind: 'solo', name: 'HTTP test', displayName: 'Guest', requestId: randomUUID() } }, { Authorization: `Bearer ${idToken}` });
-  assert.equal(create.status, 200);
-  const { result } = await create.json() as { result: { sessionId: string } };
+  assert.equal(create.status, 400);
+  const result = { sessionId: `disabled-${randomUUID()}` };
   // A player's Firebase credential is not a trusted game's backend credential.
   const unauthorized = await post('gameApi', { action: 'draw', sessionId: result.sessionId }, { Authorization: `Bearer ${idToken}` });
   assert.equal(unauthorized.status, 403);

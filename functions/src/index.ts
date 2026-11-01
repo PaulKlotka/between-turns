@@ -7,6 +7,8 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { OAuth2Client } from 'google-auth-library';
 import { RewardsService, fail } from './service';
 import { gameClients } from './config';
+import { IntegratedRewards } from './integrated-service';
+import { RemoteHub } from './hub';
 
 initializeApp();
 const emulator = process.env.FUNCTIONS_EMULATOR === 'true';
@@ -14,10 +16,37 @@ setGlobalOptions({ serviceAccount: emulator ? undefined : defineString('REWARDS_
 const clients = gameClients(emulator);
 const service = new RewardsService(getFirestore(), clients);
 const verifier = new OAuth2Client();
+const integrated = new IntegratedRewards(getFirestore(), new RemoteHub());
 
 // Deployment configures public HTTP invocation separately for domain-restricted organizations.
 // Firebase Authentication and App Check remain enforced by this callable.
-export const playerCommand = onCall({ region: 'us-central1', invoker: 'private', enforceAppCheck: !emulator, maxInstances: 5 }, request => service.player(request.auth?.uid, request.data));
+export const playerCommand = onCall({ region: 'us-central1', invoker: 'private', enforceAppCheck: !emulator, maxInstances: 5 }, request => {
+  if (!request.auth) return fail('unauthenticated', 'Open Rewards through Between Turns.');
+  return fail('failed-precondition', 'Open Rewards through Between Turns. Standalone sessions are no longer supported.');
+});
+
+export const embeddedApi = onRequest({ region: 'us-central1', invoker: 'private', cors: false, maxInstances: 5, timeoutSeconds: 60 }, async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  if (request.method !== 'POST') { response.status(405).json({ error: { code: 'invalid-argument', message: 'Use POST.' } }); return; }
+  const origins = emulator ? ['http://127.0.0.1:5173'] : (process.env.REWARDS_BROWSER_ORIGINS || 'https://rpg-rewards-paul.web.app').split(',').map(s => s.trim());
+  if (request.get('Origin') && !origins.includes(request.get('Origin')!)) { response.status(403).json({ error: { code: 'permission-denied', message: 'Invalid browser origin.' } }); return; }
+  try {
+    const data = request.body;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || JSON.stringify(data).length > 8192) return fail('invalid-argument', 'Invalid request.');
+    let result;
+    if (data.action === 'begin') result = await integrated.begin(data.nonce);
+    else {
+      const credential = request.get('Authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+      if (!credential) return fail('unauthenticated', 'Connect through Between Turns.');
+      result = data.action === 'connect' ? await integrated.connect(credential, data.nonce, data.grant) : await integrated.player(credential, data);
+    }
+    response.json({ result });
+  } catch (error) {
+    const known = error instanceof HttpsError;
+    const status = known ? ({ 'unauthenticated': 401, 'permission-denied': 403, 'invalid-argument': 400 }[error.code as string] || 409) : 503;
+    response.status(status).json({ error: { code: known ? error.code : 'unavailable', message: known ? error.message : 'Rewards could not reach Between Turns. Retry to continue.' } });
+  }
+});
 
 export const gameApi = onRequest({ region: 'us-central1', cors: false, invoker: 'private', maxInstances: 5, timeoutSeconds: 30 }, async (request, response) => {
   response.set('Cache-Control', 'no-store');
@@ -39,7 +68,8 @@ export const gameApi = onRequest({ region: 'us-central1', cors: false, invoker: 
       if (payload?.email_verified && payload.email) gameId = Object.entries(clients).find(([, c]) => c.serviceAccount === payload.email)?.[0];
     }
     if (!gameId) return fail('permission-denied', 'Game backend is not authorized.');
-    const result = await service.game(gameId, request.body);
+    if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body) || JSON.stringify(request.body).length > 8192) return fail('invalid-argument', 'Invalid request.');
+    const result = await integrated.game(gameId, request.body);
     response.json({ result });
   } catch (error) {
     const known = error instanceof HttpsError;
@@ -51,3 +81,4 @@ export const gameApi = onRequest({ region: 'us-central1', cors: false, invoker: 
 });
 
 export const cleanupExpiredSessions = onSchedule({ schedule: 'every 60 minutes', region: 'us-central1', maxInstances: 1 }, async () => { await service.cleanup(); });
+export const maintainCentralRewards = onSchedule({ schedule: 'every 1 minutes', region: 'us-central1', maxInstances: 1 }, async () => { await integrated.maintain(); });

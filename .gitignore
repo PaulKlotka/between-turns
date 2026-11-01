@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Between Turns local tooling and generated artifacts
+.firebase-config/
+.emulator-cache/
+functions/lib/
+test-results/
+playwright-report/
+screenshots/

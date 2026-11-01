@@ -35,7 +35,7 @@ export function mountEmbed(host: HTMLElement, options: { url: string; appId: str
   const timeout = window.setTimeout(() => { if (!connected) options.report(`${options.title} is taking longer than expected to connect. Try refreshing the page.`); }, 20_000);
   const onMessage = async (event: MessageEvent) => {
     if (!acceptsEmbedMessage(event, url.origin, frame.contentWindow, nonce) || disposed) return;
-    if (event.data.type === 'ready' && !connecting && !connected) {
+    if (event.data.type === 'ready' && !connecting) {
       connecting = true;
       try {
         const grant = await command({ action: 'connect', appId: options.appId, sessionId: options.sessionId, ...(options.runId ? { runId: options.runId } : {}), nonce }) as Grant;

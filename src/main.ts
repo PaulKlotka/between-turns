@@ -31,9 +31,10 @@ $('#app').innerHTML = `
     </section>
     <section id="hub" hidden>
       <div class="session-heading"><div><p class="eyebrow">YOUR PARTY, IN ONE PLACE</p><h1>Good company.<br><em>Great side quests.</em></h1></div><div class="session-chip"><span class="status-dot"></span><div><span class="eyebrow">SESSION CODE</span><strong id="header-code"></strong></div><button id="copy-code" class="icon-button" aria-label="Copy session code">⧉</button></div></div>
-      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
+      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="reward-history">Session History</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
       <section id="page-game" class="page" aria-label="Current Game"><div id="game-content"></div><div id="game-embed" hidden></div></section>
       <section id="page-rewards" class="page" aria-label="My Rewards" hidden><div class="placeholder rewards-placeholder"><div class="placeholder-art reward-art">✧</div><p class="eyebrow">A LITTLE LUCK, WELL EARNED</p><h2>Your wins belong here.</h2><p>Rewards will travel with you from game to game.<br>They’re yours to use throughout this session.</p><span class="badge">Rewards integration coming soon</span><p class="fine-print">Your reward collection will appear when RPG Rewards is connected.</p></div></section>
+      <section id="page-reward-history" class="page" aria-label="Session History" hidden><p id="reward-history-note" class="muted">Session history appears when Rewards is connected and the session is active.</p><div id="reward-history-embed"></div></section>
       <section id="page-session" class="page" aria-label="Session" hidden><div class="session-grid"><article class="panel invite-panel"><p class="eyebrow">MAKE ROOM AT THE TABLE</p><h2>Invite your party.</h2><p>Scan the QR code, share the link, or pass along your session code.</p><div class="invite-details"><img id="invite-qr" alt="QR code to join this session" width="168" height="168"><div><span class="eyebrow">SESSION CODE</span><strong id="invite-code"></strong><button id="copy-link" class="button secondary">Copy invite link ${arrow}</button></div></div><p class="fine-print" id="invite-note"></p></article><article class="panel roster-panel"><div class="panel-heading"><div><p class="eyebrow">THE PEOPLE MAKE THE PARTY</p><h2>At the table <span id="roster-count"></span></h2></div><span class="badge">All players equal</span></div><ul id="roster" class="roster"></ul><div class="session-bottom"><p id="expiry-note"></p><button id="leave-session" class="button quiet">Leave session ${arrow}</button></div><div id="leave-confirm" hidden><p>Leave this session? Joining again requires its invitation code.</p><button id="confirm-leave" class="button secondary">Leave session</button><button id="cancel-leave" class="button quiet">Stay here</button></div></article></div><article class="panel history-panel"><p class="eyebrow">THE STORY SO FAR</p><h2>Session results</h2><div id="history"></div></article></section>
     </section>
   </main><footer><span>BETWEEN TURNS</span><p>Made for the moments around the table.</p><span class="footer-mark">✧</span></footer>`;
@@ -65,8 +66,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
 });
 function navigate(next: string) {
   page = next;
-  for (const value of ['game', 'rewards', 'session']) $(`#page-${value}`).hidden = value !== page;
+  if (view) renderRewards();
+  for (const value of ['game', 'rewards', 'reward-history', 'session']) $(`#page-${value}`).hidden = value !== page;
   document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach(button => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
+  if (view) renderRewards();
   updateGameLayout();
 }
 
@@ -138,13 +141,13 @@ function apply(next: SessionView | null) {
 function renderRewards() {
   if (!view) return;
   const app = view.rewardsApp;
-  const key = !view.expired && app ? `${view.session.id}:${app.embedUrl}` : '';
+  const key = !view.expired && app ? `${view.session.id}:${app.embedUrl}:${page === 'reward-history' ? 'history' : 'inventory'}` : '';
   if (key === rewardsKey) return;
   disposeRewards?.(); disposeRewards = undefined; rewardsKey = key;
   const host = document.getElementById('rewards-embed') || Object.assign(document.createElement('div'), { id: 'rewards-embed' });
-  $('#page-rewards').append(host);
-  const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
-  if (key && app) disposeRewards = embed.mountEmbed(host, { url: app.embedUrl, appId: app.id, sessionId: view.session.id, title: 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
+  (page === 'reward-history' ? $('#reward-history-embed') : $('#page-rewards')).append(host);
+  $('#reward-history-note').hidden = !!key; const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
+  if (key && app) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl); url.searchParams.set('view', page === 'reward-history' ? 'history' : 'inventory'); return url.href; })(), appId: app.id, sessionId: view.session.id, title: page === 'reward-history' ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
   host.hidden = !key;
 }
 function renderGame() {

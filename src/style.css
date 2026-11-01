@@ -29,3 +29,5 @@
 }
 @media(max-width:700px){.intro h1 br:nth-of-type(1){display:block}}
 @media(max-width:360px){.intro h1{font-size:48px;letter-spacing:-1.7px}.entry-number{display:none}.invite-details{flex-wrap:wrap}}
+
+#rewards-embed .game-frame{min-height:70vh;width:100%;border:0}.navigation{flex-wrap:wrap}

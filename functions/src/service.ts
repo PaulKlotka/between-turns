@@ -207,7 +207,8 @@ export class HubService {
       if (command.action === 'context') {
         const member = await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
         if (app.kind === 'game') assert(member.run?.gameId === appId && member.run.id === command.runId, 'permission-denied', 'Game instance is not active.');
-        return this.context(member, command.playerId, app.kind);
+        if (app.kind === 'rewards' && command.runId) assert(member.phase === 'playing' && member.run?.id === command.runId && member.run.gameId === command.gameId, 'permission-denied', 'Game instance is not active.');
+        return this.context(member, command.playerId, command.runId ? 'game' : app.kind);
       }
       const eventId = id(command.eventId, 'Event ID');
       const path = `receipts/${hash(`${appId}:${sid}:${eventId}`)}`;

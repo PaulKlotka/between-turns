@@ -34,6 +34,6 @@ export type PlayerResponse = SessionView | Grant | null;
 export interface ConnectionContext { version: 1; playerId: string; displayName: string; sessionId: string; runId: string | null; expiresAt: number; }
 export type GameCommand =
   | { action: 'exchange'; token: string; nonce: string }
-  | { action: 'context'; sessionId: string; playerId: string; runId?: string }
+  | { action: 'context'; sessionId: string; playerId: string; runId?: string; gameId?: string }
   | { action: 'activity'; sessionId: string; playerId: string; runId?: string; eventId: string }
   | { action: 'complete'; sessionId: string; runId: string; eventId: string; winnerIds: string[]; rewardsReceipt: string };

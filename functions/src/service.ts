@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { selectReward } from '../../shared/catalog';
-import { Award, GRANT_MS, IDLE_MS, Member, Offer, Session, SessionView, isExpired } from '../../shared/model';
+import { Award, GRANT_MS, IDLE_MS, Member, Offer, Session, SessionView, isExpired, undoUseRemaining } from '../../shared/model';
 
 type Input = Record<string, unknown>;
 export interface GameClient { serviceAccount: string; redirectUris: string[] }
@@ -109,7 +109,16 @@ export class RewardsService {
           const award = snap.data() as Award;
           if (award.playerId !== playerId) return fail('permission-denied', 'Only the owner can change this reward.');
           if ((award.consumedAt !== null) !== input.consumed) {
-            tx.update(ref, { consumedAt: input.consumed ? this.clock() : null });
+            const now = this.clock();
+            if (input.consumed) {
+              const inventory = await tx.get(this.db.collection(`sessions/${sessionId}/awards`).where('playerId', '==', playerId));
+              if (inventory.docs.some(doc => undoUseRemaining(doc.data() as Award, now) > 0)) {
+                return fail('failed-precondition', 'Wait for the 15-second undo window to end, or undo your last reward use first.');
+              }
+            } else if (undoUseRemaining(award, now) === 0) {
+              return fail('failed-precondition', 'The 15-second undo window has ended.');
+            }
+            tx.update(ref, { consumedAt: input.consumed ? now : null });
             this.touch(tx, session);
           }
           return { awardId, consumed: input.consumed };

@@ -1,5 +1,8 @@
 export const IDLE_MS = 24 * 60 * 60 * 1000;
 export const GRANT_MS = 60 * 1000;
+export const UNDO_USE_MS = 15 * 1000;
+export const undoUseRemaining = (award: Pick<Award, 'consumedAt'>, now: number): number =>
+  award.consumedAt === null ? 0 : Math.max(0, award.consumedAt + UNDO_USE_MS - now);
 export interface RewardDefinition { id: string; name: string; qualifyingRoll: string }
 export interface Session {
   id: string; name: string; kind: 'solo' | 'shared'; joinCode: string;

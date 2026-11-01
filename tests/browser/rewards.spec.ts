@@ -1,6 +1,41 @@
 import { test, expect } from '@playwright/test';
 import jsQR from 'jsqr';
 
+test('reward use locks other rewards and undo expires after 15 seconds, including after reload', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('status')).toBeEmpty();
+  await page.getByLabel('Your player name').fill('Timer player');
+  await page.getByLabel('Session name', { exact: true }).fill('Undo timer');
+  await page.getByRole('button', { name: 'Create session' }).click();
+  await expect(page.getByRole('heading', { name: 'Undo timer', exact: true })).toBeVisible();
+  await page.goto('http://127.0.0.1:5174/connect');
+  await page.getByRole('button', { name: 'Continue to game' }).click();
+  await expect(page).toHaveURL('http://127.0.0.1:5174/');
+  for (let i = 0; i < 2; i++) {
+    await page.getByRole('button', { name: 'Draw reward' }).click();
+    await page.getByRole('button', { name: 'Record a win' }).click();
+  }
+  await page.getByRole('link', { name: 'Open RPG Rewards' }).click();
+  const use = page.getByRole('button', { name: 'Use reward', exact: true });
+  const undo = page.getByRole('button', { name: /Undo use/ });
+  await expect(use).toHaveCount(2);
+  await use.first().click();
+  await expect(undo).toContainText(/\d+s/);
+  await expect(use).toBeDisabled();
+  await undo.click();
+  await expect(use).toHaveCount(2);
+  await expect(use.first()).toBeEnabled();
+  await expect(use.last()).toBeEnabled();
+  await use.first().click();
+  await expect(undo).toBeEnabled();
+  await page.reload();
+  await expect(undo).toBeVisible();
+  await expect(use).toBeDisabled();
+  await expect(undo).toHaveCount(0, { timeout: 20_000 });
+  await expect(use).toBeEnabled();
+  await expect(page.locator('.state-pill', { hasText: 'Consumed' })).toBeVisible();
+});
+
 test('guest identity, shared membership, game handoff, rewards, undo and phone layouts', async ({ page, browser }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));

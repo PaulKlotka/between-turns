@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { RewardsService } from '../../functions/src/service';
-import { IDLE_MS, type Award, type Offer, type SessionView } from '../../shared/model';
+import { IDLE_MS, UNDO_USE_MS, type Award, type Offer, type SessionView } from '../../shared/model';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Run with npm run verify:emulators or set FIRESTORE_EMULATOR_HOST to the local emulator.');
 const projectId = 'demo-rpg-rewards';
@@ -107,6 +107,32 @@ test('only the owner can consume or undo; changes extend inactivity but no-ops a
   assert.equal((await service.view(player, sharedId)).session.expiresAt, now + IDLE_MS);
   assert.equal((await service.view(player, sharedId)).inventory.find(a => a.id === award.id)?.consumedAt, null);
 });
+test('undo window serializes reward use, survives retries, and expires at exactly 15 seconds', async () => {
+  const inventory = (await service.view(player, sharedId)).inventory;
+  const consume = (awardId: string, consumed = true) => service.player(player, {
+    action: 'consume', sessionId: sharedId, awardId, consumed, requestId: req(),
+  });
+  const results = await Promise.allSettled(inventory.map(a => consume(a.id)));
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  const rejected = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+  assert.equal(rejected.reason.code, 'failed-precondition');
+  const used = (await service.view(player, sharedId)).inventory.find(a => a.consumedAt !== null)!;
+  const other = inventory.find(a => a.id !== used.id)!;
+  // Another player's rewards remain usable during this player's window.
+  const friendAward = (await service.view(friend, sharedId)).inventory[0];
+  await service.player(friend, { action: 'consume', sessionId: sharedId, awardId: friendAward.id, consumed: true, requestId: req() });
+  now += UNDO_USE_MS - 1;
+  await expectCode(consume(other.id), 'failed-precondition');
+  await consume(used.id, false);
+  await consume(other.id);
+  const usedAt = now;
+  await expectCode(consume(used.id), 'failed-precondition');
+  now += UNDO_USE_MS;
+  await expectCode(consume(other.id, false), 'failed-precondition');
+  await consume(used.id);
+  assert.equal((await service.view(player, sharedId)).inventory.find(a => a.id === other.id)?.consumedAt, usedAt);
+});
+
 test('reads do not extend expiration; new gameplay activity does', async () => {
   const expiry = (await service.view(player, sharedId)).session.expiresAt;
   now += 1_000;

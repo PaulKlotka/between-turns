@@ -64,6 +64,7 @@ The browser suite starts Vite and the sample game if needed; it requires the Fir
 - The hourly cleanup removes expired sessions, subcollections and join codes. Failed recursive deletion leaves an expired parent eligible for another cleanup attempt. One-time connection grants expire after 60 seconds; global create-session receipts are retained for seven days.
 - The hardcoded catalog is shared by every game. Each draw independently selects an equally likely reward. Repeated rewards have independent award records. An offered reward is immutable; an award uses its stored definition, rather than looking up a potentially changed catalog entry.
 - One offer can be awarded once per winner, allowing tied winners. A later win should draw a new offer. Only an award's owner can consume it or undo consumption.
+- Players have 15 seconds to undo a reward use. Other rewards in the session are locked for that player until they undo or the window ends; after 15 seconds, the used reward cannot be restored. Reloading or switching tabs does not reset this window.
 - Every reward grants +1 to one qualifying roll, declared beforehand and usable once. Only one reward applies per roll; attack rewards affect accuracy, not damage. These are copied house rules, not official Starfinder rewards.
 
 ## Architecture

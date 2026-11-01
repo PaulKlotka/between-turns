@@ -92,4 +92,5 @@ The Rewards UI uses `playerCommand` through the Firebase callable SDK, carrying 
 Create: `{ action: 'create', requestId, name, kind: 'solo' | 'shared', displayName }`.
 Join: `{ action: 'join', joinCode, displayName }`.
 Consume/undo: `{ action: 'consume', sessionId, awardId, consumed: boolean, requestId }`.
+Using a reward starts a 15-second undo window, measured from its server `consumedAt` timestamp. During that window the player cannot use another reward in the session. Undoing the use immediately releases the lock; otherwise it releases at 15 seconds and the use becomes permanent. These rules are enforced transactionally across tabs and devices. Other players can continue using their rewards.
 List/view and connect are illustrated by `src/client.ts` and `src/main.ts`.

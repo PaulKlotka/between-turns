@@ -1,1 +1,1 @@
-{ "indexes": [], "fieldOverrides": [] }
+{ "indexes": [], "fieldOverrides": [{ "collectionGroup": "awards", "fieldPath": "accountId", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] }] }

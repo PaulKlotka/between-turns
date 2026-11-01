@@ -3,6 +3,7 @@ import { after, test } from 'node:test';
 import { createRequire } from 'node:module';
 import { createHash, randomUUID } from 'node:crypto';
 import { HubService } from '../../.integration-work/between-turns/functions/src/service';
+import { Identities } from '../../.integration-work/between-turns/functions/src/identity';
 import { FirestoreStore } from '../../.integration-work/between-turns/functions/src/store';
 import type { GameCommand, SessionView, Grant } from '../../.integration-work/between-turns/shared/types';
 import { IntegratedRewards as CentralRewards } from '../../functions/src/integrated-service';
@@ -20,6 +21,7 @@ const hubApp = hubRequire('firebase-admin/app').initializeApp({ projectId: 'demo
 const bingoApp = bingoRequire('firebase-admin/app').initializeApp({ projectId: 'demo-integrated-bingo' }, 'full-stack');
 const rewardApp = rewardRequire('firebase-admin/app').initializeApp({ projectId: 'demo-integrated-rewards' }, 'full-stack');
 const bingoDb = bingoRequire('firebase-admin/firestore').getFirestore(bingoApp);
+const hubDb = hubRequire('firebase-admin/firestore').getFirestore(hubApp);
 const rewardDb = rewardRequire('firebase-admin/firestore').getFirestore(rewardApp);
 after(async () => { await Promise.all([hubRequire('firebase-admin/app').deleteApp(hubApp), bingoRequire('firebase-admin/app').deleteApp(bingoApp), rewardRequire('firebase-admin/app').deleteApp(rewardApp)]); });
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -30,6 +32,12 @@ async function fixture() {
     { id: 'rpg-bingo', kind: 'game', origin: 'https://bingo.example' }, { id: 'rpg-rewards', kind: 'rewards', origin: 'https://rewards.example', embedUrl: 'https://rewards.example/embed' },
   ], () => now);
   const rh: HubGateway = {
+    accountContext: async (playerId, accountVersion) => hub.game('rpg-rewards', { action: 'accountContext', playerId, accountVersion }) as Promise<HubContext>,
+    transfers: async accountId => {
+      const jobs = hubDb.collection('rewardTransfers');
+      return (await (accountId ? jobs.where('accountId', '==', accountId) : jobs).get()).docs.map((d: any) => d.data());
+    },
+    ackTransfer: async id => hubDb.doc(`rewardTransfers/${id}`).delete(),
     exchange: async (token, nonce) => hub.game('rpg-rewards', { action: 'exchange', token, nonce }) as Promise<HubContext>,
     context: async (sessionId, playerId, runId, gameId) => hub.game('rpg-rewards', { action: 'context', sessionId, playerId, ...(runId ? { runId, gameId } : {}) }) as Promise<HubContext>,
     activity: async (sessionId, playerId, eventId) => hub.game('rpg-rewards', { action: 'activity', sessionId, playerId, eventId }),
@@ -66,8 +74,86 @@ async function fixture() {
   const run = (await ref.get()).data() as EmbeddedRun;
   const card = Array.from({ length: 25 }, (_, i) => i === 12 ? null : i % 20 + 1);
   await ref.update({ pattern: 'single-line', marks: [1, 2, 3, 4], players: Object.fromEntries(Object.entries(run.players).map(([id, p]) => [id, { ...p, card }])) });
-  return { hub, rewards, bingo, gateway, a, b, ac, bc, ar, br, ref, sessionId, runId, advance: (value: number) => { now = value; }, lose: () => { loseSettlement = true; }, now: () => now };
+  async function wallet(playerId: string) {
+    const nonce = randomUUID(), { credential } = await rewards.begin(nonce);
+    const grant = await hub.player(playerId, { action: 'accountConnect', appId: 'rpg-rewards', nonce }) as Grant;
+    await rewards.connect(credential, nonce, grant.token); return credential;
+  }
+  return { hub, rewards, bingo, gateway, rh, wallet, connect, identities: new Identities(new FirestoreStore(), () => now), a, b, ac, bc, ar, br, ref, sessionId, runId, advance: (value: number) => { now = value; }, lose: () => { loseSettlement = true; }, now: () => now };
 }
+
+test('Google sign-in transfers existing awards in place into an existing account and survives session deletion', async () => {
+  const f = await fixture(); const start = await f.bingo.command(f.ac, { action: 'view' });
+  await f.rewards.game('rpg-bingo', { action: 'settle', sessionId: f.sessionId, runId: f.runId, offerId: start.offer!.id, winnerIds: [f.a, f.b], requestId: 'before-login' });
+  const before = await f.rewards.player(f.ar, { action: 'view' }); const award = before.inventory[0];
+  await f.rewards.player(f.ar, { action: 'consume', awardId: award.id, consumed: true, requestId: 'guest-use' });
+  const profile = { accountId: `google-${f.a}`, displayName: 'Google Alpha', photoURL: 'https://lh3.googleusercontent.com/alpha' };
+  const firebaseUid = `existing-${f.a}`;
+  await f.identities.signIn(firebaseUid, profile);
+  const oldRef = rewardDb.doc(`centralSessions/old-${f.sessionId}/awards/previous`);
+  await oldRef.set({ ...award, id: 'previous', accountId: profile.accountId, consumedAt: null });
+  const originalPath = `centralSessions/${f.sessionId}/awards/${award.id}`;
+  const claim = await f.identities.prepare(f.a);
+  await f.identities.signIn(firebaseUid, profile, claim.token);
+  await f.identities.signIn(firebaseUid, profile, claim.token);
+  assert.equal(await f.identities.resolve(firebaseUid, profile.accountId), f.a);
+  await assert.rejects(f.bingo.command(f.ac, { action: 'view' }), /Identity changed/);
+  await assert.rejects(f.rewards.player(f.ar, { action: 'view' }), /Identity changed/);
+  const card = start.card; const updated = await f.connect(f.a, 'rpg-bingo');
+  const game = await f.bingo.command(updated, { action: 'view' });
+  assert.deepEqual(game.card, card); assert.equal(game.players.find(p => p.playerId === f.a)?.name, profile.displayName);
+  assert.equal(game.players.find(p => p.playerId === f.a)?.photoURL, profile.photoURL);
+  const wallet = await f.wallet(f.a); const saved = await f.rewards.player(wallet, { action: 'view' });
+  assert.equal(saved.inventory.length, 2); assert.equal(saved.persistent, true);
+  const transferred = saved.inventory.find(a => a.id === award.id)!;
+  assert.equal(transferred.consumedAt, f.now());
+  assert.equal((await rewardDb.doc(originalPath).get()).get('accountId'), profile.accountId);
+  assert.equal((await rewardDb.collection(`centralSessions/${f.sessionId}/awards`).get()).size, 2);
+  await f.rewards.player(wallet, { action: 'consume', awardId: award.id, consumed: false, requestId: 'account-undo' });
+  await f.rewards.syncTransfers(profile.accountId); // Replayed delivery cannot copy awards.
+  const otherProfile = { ...profile, accountId: `other-${f.a}` };
+  await f.identities.signIn(`other-user-${f.a}`, otherProfile);
+  const otherWallet = await f.wallet(`other-user-${f.a}`);
+  await assert.rejects(f.rewards.player(otherWallet, { action: 'consume', awardId: award.id, consumed: true, requestId: 'steal' }), /reward owner/);
+  f.advance(86401001); await hubDb.doc(`sessions/${f.sessionId}`).delete();
+  const returningWallet = await f.wallet(await f.identities.resolve(firebaseUid, profile.accountId));
+  assert.equal((await f.rewards.player(returningWallet, { action: 'view' })).inventory.length, 2);
+  await f.rewards.player(returningWallet, { action: 'consume', awardId: award.id, consumed: true, requestId: 'after-session' });
+  await f.identities.signOut(f.a);
+  await assert.rejects(f.rewards.player(returningWallet, { action: 'view' }), /Sign in again/);
+});
+
+test('concurrent transfer and settlement preserve award IDs and permanent ownership across retries', async () => {
+  const f = await fixture(); const run = await f.bingo.command(f.ac, { action: 'view' });
+  const profile = { accountId: `google-${f.a}`, displayName: 'Google Alpha', photoURL: null };
+  const claim = await f.identities.prepare(f.a); await f.identities.signIn(f.a, profile, claim.token);
+  const jobs = await f.rh.transfers!(profile.accountId); assert.equal(jobs.length, 1);
+  const settle = { action: 'settle', sessionId: f.sessionId, runId: f.runId, offerId: run.offer!.id, winnerIds: [f.a], requestId: 'racing-settle' };
+  await Promise.all([f.rewards.transfer(jobs[0]), f.rewards.game('rpg-bingo', settle), f.rewards.transfer(jobs[0]), f.rewards.game('rpg-bingo', settle)]);
+  await f.rewards.transfer(jobs[0]);
+  const awards = await rewardDb.collection(`centralSessions/${f.sessionId}/awards`).get();
+  assert.equal(awards.size, 1); assert.equal(awards.docs[0].get('accountId'), profile.accountId);
+  assert.equal(awards.docs[0].get('playerName'), profile.displayName);
+  const wallet = await f.wallet(f.a);
+  assert.equal((await f.rewards.player(wallet, { action: 'view' })).inventory.length, 1);
+});
+
+test('durable transfer recovers after the session disappears and a lost acknowledgement', async () => {
+  const f = await fixture(); const run = await f.bingo.command(f.ac, { action: 'view' });
+  await f.rewards.game('rpg-bingo', { action: 'settle', sessionId: f.sessionId, runId: f.runId, offerId: run.offer!.id, winnerIds: [f.a], requestId: 'deferred-award' });
+  const original = (await f.rewards.player(f.ar, { action: 'view' })).inventory[0];
+  const profile = { accountId: `deferred-${f.a}`, displayName: 'Google Alpha', photoURL: null };
+  const claim = await f.identities.prepare(f.a); await f.identities.signIn(f.a, profile, claim.token);
+  f.advance(86401001); await hubDb.doc(`sessions/${f.sessionId}`).delete();
+  const failing = new CentralRewards(rewardDb, { ...f.rh, ackTransfer: async () => { throw new Error('Lost acknowledgement'); } }, f.now);
+  await assert.rejects(failing.syncTransfers(profile.accountId), /Lost acknowledgement/);
+  assert.equal((await f.rh.transfers!(profile.accountId)).length, 1);
+  await f.rewards.syncTransfers(profile.accountId);
+  assert.equal((await f.rh.transfers!(profile.accountId)).length, 0);
+  const wallet = await f.wallet(f.a), saved = await f.rewards.player(wallet, { action: 'view' });
+  assert.equal(saved.inventory.length, 1); assert.equal(saved.inventory[0].id, original.id);
+  const collection = await rewardDb.collection(`centralSessions/${f.sessionId}/awards`).get(); assert.equal(collection.size, 1);
+});
 test('real hub, Bingo and Rewards complete a tied game, recover settlement, start a new run and preserve inventory', async () => {
   const f = await fixture();
   const start = await f.bingo.command(f.ac, { action: 'view' });

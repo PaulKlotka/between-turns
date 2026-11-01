@@ -1,13 +1,19 @@
 import { GoogleAuth } from 'google-auth-library';
-import type { CentralContext } from '../../shared/integration';
+import type { CentralContext, RewardTransfer } from '../../shared/integration';
 import { fail } from './service';
 
 export interface Hub {
+  accountContext?(playerId: string, accountVersion: number): Promise<CentralContext>;
+  transfers?(accountId?: string): Promise<RewardTransfer[]>;
+  ackTransfer?(id: string): Promise<unknown>;
   exchange(token: string, nonce: string): Promise<CentralContext>;
   context(sessionId: string, playerId: string, runId?: string, gameId?: string): Promise<CentralContext>;
   activity(sessionId: string, playerId: string, eventId: string): Promise<unknown>;
 }
 export class RemoteHub implements Hub {
+  accountContext(playerId: string, accountVersion: number) { return this.request<CentralContext>({ action: 'accountContext', playerId, accountVersion }); }
+  transfers(accountId?: string) { return this.request<RewardTransfer[]>({ action: 'rewardTransfers', ...(accountId ? { accountId } : {}) }); }
+  ackTransfer(transferId: string) { return this.request({ action: 'ackRewardTransfer', transferId }); }
   private auth = new GoogleAuth();
   private async request<T>(data: object): Promise<T> {
     const url = process.env.BETWEEN_TURNS_API_URL;

@@ -1,5 +1,13 @@
 # Rewards integration API
 
+## Google accounts (November 1, 2026 extension)
+
+Session contexts may include a trusted `accountId` and `photoURL`. Existing guest contexts still work. Account-only grants return `sessionId: ''`, `runId: null`, `accountId` and `accountVersion`; Rewards validates these through the hub's private `accountContext` action. This permits inventory view/use/undo without a live session. It does not permit draws or settlements without an active game.
+
+Before account inventory reads, and in minute maintenance, Rewards drains the hub's durable `rewardTransfers` jobs and acknowledges each completed transfer with `ackRewardTransfer`. An ownership fence serializes migration with settlement. Existing award records are updated with account ownership, retaining IDs and use state. Deploy `firestore.indexes.json` for the `awards.accountId` collection-group query. Session cleanup must never recursively delete account awards under `centralSessions`; the existing legacy `sessions` cleanup remains separate.
+
+The `view` response includes `persistent: true` for account inventory, which spans source sessions. Account use/undo shares one 15-second lock across all source sessions. History remains scoped to the current session and excludes consumption status. A signed-out/changed account must perform a fresh handoff; stored guest connections cannot upgrade themselves into account access.
+
 Between Turns is the sole authority for player identity, membership, active runs and expiration. RPG Rewards is embedded-only. Browser calls never supply a player or session ID to authorize inventory operations.
 
 ## Embedded browser API

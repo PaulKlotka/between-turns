@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 test('standalone Rewards sends players to Between Turns without starting its own login', async ({ page }) => {
   const requests: string[] = [];
@@ -10,6 +11,11 @@ test('standalone Rewards sends players to Between Turns without starting its own
 });
 
 test('embedded inventory, owner use and undo, history privacy, reconnect, and narrow layouts', async ({ page }) => {
+  // Serve the synthetic parent here so this test can run alongside the real hub.
+  // Chromium classifies routed documents as public; permit this test origin to
+  // load its loopback iframe without changing application security settings.
+  await page.context().grantPermissions(['local-network-access'], { origin: 'http://127.0.0.1:5180' });
+  await page.route('http://127.0.0.1:5180/test', route => route.fulfill({ contentType: 'text/html', body: readFileSync(new URL('./hub.html', import.meta.url), 'utf8') }));
   let consumedAt: number | null = null;
   let revoked = false;
   const requests: Record<string, unknown>[] = [];

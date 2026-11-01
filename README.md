@@ -1,5 +1,7 @@
 # RPG Rewards
 
+Released Google-account update (November 1, 2026): awards owned by a Google account persist across sessions and devices. Between Turns supplies verified account identity and a durable transfer outbox; Rewards updates guest award ownership in place, preserving document paths, IDs and consumption state. My Rewards can connect without an active session; Session History remains session-scoped. Functions/Hosting are deployed and the account-inventory index is READY. Real Google login and a stored account award were verified; the sibling hub's `docs/RELEASE-2026-11-01-GOOGLE.md` records evidence and limits. See [API additions](docs/API.md).
+
 Rewards service and embedded pages for Between Turns. Between Turns owns identity, session membership, navigation, active game runs and inactivity expiry. Rewards selects an equally likely reward from the shared catalog when a game begins, records confirmed winners, and manages reward use.
 
 Players open **My Rewards** and **Session History** from Between Turns. My Rewards supports owner-only use, a 15-second undo window, and a lock on other rewards during that window. Session History shows rewards and their winners, without usage status. Visiting Rewards directly points players to Between Turns; it does not initialize a separate login or offer session creation/joining.

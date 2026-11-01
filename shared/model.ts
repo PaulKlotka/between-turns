@@ -13,6 +13,7 @@ export interface Offer {
   id: string; gameId: string; sessionId: string; reward: RewardDefinition; createdAt: number;
 }
 export interface Award {
+  accountId?: string | null; sessionId?: string; playerPhotoURL?: string | null;
   id: string; offerId: string; gameId: string; playerId: string; playerName: string;
   reward: RewardDefinition; awardedAt: number; consumedAt: number | null;
 }

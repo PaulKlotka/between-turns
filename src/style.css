@@ -31,3 +31,7 @@
 @media(max-width:360px){.intro h1{font-size:48px;letter-spacing:-1.7px}.entry-number{display:none}.invite-details{flex-wrap:wrap}}
 
 #rewards-embed .game-frame{min-height:70vh;width:100%;border:0}.navigation{flex-wrap:wrap}
+
+.avatar{position:relative;overflow:hidden;flex-shrink:0}.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.header-right{flex-wrap:wrap;justify-content:flex-end}.guest{display:inline-flex;align-items:center;gap:.5rem}.guest .avatar{width:2rem;height:2rem}#saved-rewards{margin:2rem auto;max-width:70rem}#saved-rewards .game-frame{width:100%;min-height:70vh;border:0}@media(max-width:600px){.header{align-items:flex-start}.header-right{gap:.4rem;max-width:65%}.header-right .button{font-size:.75rem;padding:.5rem}.guest{font-size:.75rem}}
+
+.header{height:auto;min-height:90px;padding-top:16px;padding-bottom:16px}

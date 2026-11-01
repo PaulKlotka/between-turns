@@ -35,13 +35,13 @@ test('two guests join, names stay unique, invitations work, navigation and ident
   await expect(alice.locator('#roster')).toContainText('Bob'); await expect(alice.locator('#member-count')).toHaveText('2');
   await bob.getByRole('button', { name: 'My Rewards', exact: true }).click(); await expect(bob.getByRole('heading', { name: 'Your wins belong here.' })).toBeVisible();
   await bob.reload(); await expect(bob.locator('#header-code')).toHaveText(code); await expect(bob.locator('#player-label')).toHaveText('Playing as Bob');
-  await bob.getByRole('button', { name: /^Session/ }).click(); await expect(bob.locator('#roster')).toContainText('Alice');
+  await bob.getByRole('button', { name: /^Session \d/ }).click(); await expect(bob.locator('#roster')).toContainText('Alice');
   await bob.screenshot({ path: 'screenshots/session-mobile.png', fullPage: true });
   for (const width of [390, 320]) {
     await bob.setViewportSize({ width, height: 844 });
     expect(await bob.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     for (const name of ['Current Game', 'My Rewards']) { await bob.getByRole('button', { name, exact: true }).click(); expect(await bob.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); }
-    await bob.getByRole('button', { name: /^Session/ }).click();
+    await bob.getByRole('button', { name: /^Session \d/ }).click();
   }
   await bob.getByRole('button', { name: 'Leave session', exact: true }).first().click(); await bob.locator('#confirm-leave').click();
   await expect(bob.getByRole('heading', { name: 'The adventure between adventures.' })).toBeVisible();
@@ -55,7 +55,7 @@ test('two guests join, names stay unique, invitations work, navigation and ident
   await bob.goto(decoded!.data); await expect(bob.getByRole('button', { name: 'Join the session', exact: true })).toBeEnabled();
   await bob.getByRole('button', { name: 'Join the session', exact: true }).click(); await expect(bob.locator('#header-code')).toHaveText(code);
   await expect(alice.locator('#member-count')).toHaveText('2');
-  await bob.getByRole('button', { name: /^Session/ }).click(); await bob.locator('#leave-session').click(); await bob.locator('#confirm-leave').click();
+  await bob.getByRole('button', { name: /^Session \d/ }).click(); await bob.locator('#leave-session').click(); await bob.locator('#confirm-leave').click();
   await expect(bob.getByRole('heading', { name: 'The adventure between adventures.' })).toBeVisible(); await expect(alice.locator('#member-count')).toHaveText('1');
   await alice.screenshot({ path: 'screenshots/session-desktop.png', fullPage: true });
   await bob.setViewportSize({ width: 320, height: 844 }); expect(await bob.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

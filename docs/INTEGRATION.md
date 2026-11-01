@@ -1,5 +1,7 @@
 # Between Turns integration contract, version 1
 
+November 1, 2026 local extension: [Google identity and permanent reward ownership](AUTHENTICATION.md) supersedes the guest-only, account-linking and session-only inventory restrictions below. Existing session handshakes remain compatible; account-only contexts are accepted exclusively by the updated Rewards backend. This extension requires coordinated deployment.
+
 This document is the implementation handoff for later updates to RPG Bingo and RPG Rewards. Neither existing app is connected in the initial release. The local test suite is the reference adapter; production does not expose test-game or simulated-win controls.
 
 ## Ownership

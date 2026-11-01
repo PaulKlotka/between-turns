@@ -38,7 +38,7 @@ export function mountEmbed(host: HTMLElement, options: { url: string; appId: str
     if (event.data.type === 'ready' && !connecting) {
       connecting = true;
       try {
-        const grant = await command({ action: 'connect', appId: options.appId, sessionId: options.sessionId, ...(options.runId ? { runId: options.runId } : {}), nonce }) as Grant;
+        const grant = await command(options.sessionId ? { action: 'connect', appId: options.appId, sessionId: options.sessionId, ...(options.runId ? { runId: options.runId } : {}), nonce } : { action: 'accountConnect', appId: options.appId, nonce }) as Grant;
         if (!disposed) frame.contentWindow?.postMessage({ channel: 'between-turns', version: 1, type: 'connect', nonce, grant: grant.token, expiresAt: grant.expiresAt }, url.origin);
       } catch { options.report('The game connection could not be established. Please refresh to try again.'); }
       finally { connecting = false; }

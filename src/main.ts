@@ -15,13 +15,15 @@ let rewardsKey = ''; let disposeRewards: (() => void) | undefined;
 let epoch = 0; let pending: PlayerCommand | null = null;
 let pollRunning = false; let lastPresence = 0; let initialized = false;
 let inviteCode = ''; let qrRevision = 0;
+let identity: import('./client').Identity = { signedIn: false, rewardsApp: null };
+let watchingIdentity = false; let changingIdentity = false; let walletOpen = false;
 const connectionId = crypto.randomUUID();
 const requestId = () => crypto.randomUUID();
 function saved(key: string) { try { return localStorage.getItem(key) || ''; } catch { return ''; } }
 function save(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Firebase also reports persistence failures. */ } }
 
 $('#app').innerHTML = `
-  <header class="header"><a class="brand" href="/" aria-label="Between Turns home"><span class="brand-die">${die}</span><span>BETWEEN<span class="brand-second">TURNS</span></span></a><div class="header-right"><span id="environment"></span><span class="guest"><span class="status-dot"></span> Guest player</span></div></header>
+  <header class="header"><a class="brand" href="/" aria-label="Between Turns home"><span class="brand-die">${die}</span><span>BETWEEN<span class="brand-second">TURNS</span></span></a><div class="header-right"><span id="environment"></span><span id="account-label" class="guest"><span class="status-dot"></span> Guest player</span><button id="google-sign-in" class="button secondary" disabled>Sign in with Google</button><button id="open-rewards" class="button quiet" hidden>My Rewards</button><button id="google-sign-out" class="button quiet" hidden>Sign out</button></div></header>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <div id="connection" class="connection" role="status">Connecting your guest identity…</div>
   <main>
@@ -37,7 +39,51 @@ $('#app').innerHTML = `
       <section id="page-reward-history" class="page" aria-label="Session History" hidden><p id="reward-history-note" class="muted">Session history appears when Rewards is connected and the session is active.</p><div id="reward-history-embed"></div></section>
       <section id="page-session" class="page" aria-label="Session" hidden><div class="session-grid"><article class="panel invite-panel"><p class="eyebrow">MAKE ROOM AT THE TABLE</p><h2>Invite your party.</h2><p>Scan the QR code, share the link, or pass along your session code.</p><div class="invite-details"><img id="invite-qr" alt="QR code to join this session" width="168" height="168"><div><span class="eyebrow">SESSION CODE</span><strong id="invite-code"></strong><button id="copy-link" class="button secondary">Copy invite link ${arrow}</button></div></div><p class="fine-print" id="invite-note"></p></article><article class="panel roster-panel"><div class="panel-heading"><div><p class="eyebrow">THE PEOPLE MAKE THE PARTY</p><h2>At the table <span id="roster-count"></span></h2></div><span class="badge">All players equal</span></div><ul id="roster" class="roster"></ul><div class="session-bottom"><p id="expiry-note"></p><button id="leave-session" class="button quiet">Leave session ${arrow}</button></div><div id="leave-confirm" hidden><p>Leave this session? Joining again requires its invitation code.</p><button id="confirm-leave" class="button secondary">Leave session</button><button id="cancel-leave" class="button quiet">Stay here</button></div></article></div><article class="panel history-panel"><p class="eyebrow">THE STORY SO FAR</p><h2>Session results</h2><div id="history"></div></article></section>
     </section>
+    <section id="saved-rewards" class="panel" hidden><h2>My Rewards</h2><p>Your account rewards stay with you after sessions end.</p><div id="saved-rewards-host"></div><p id="saved-rewards-note">Rewards is waiting to connect.</p></section>
   </main><footer><span>BETWEEN TURNS</span><p>Made for the moments around the table.</p><span class="footer-mark">✧</span></footer>`;
+
+function avatar(name: string, photoURL?: string | null) {
+  const safePhoto = photoURL && /^https:\/\/[^/]+\.googleusercontent\.com\//.test(photoURL);
+  return `<span class="avatar">${escape(name.slice(0, 1).toUpperCase())}${safePhoto ? `<img src="${escape(photoURL)}" alt="" referrerpolicy="no-referrer" data-avatar>` : ''}</span>`;
+}
+document.addEventListener('error', event => { const img = event.target; if (img instanceof HTMLImageElement && img.hasAttribute('data-avatar')) img.remove(); }, true);
+function renderIdentity() {
+  $('#account-label').innerHTML = identity.signedIn ? `${avatar(identity.displayName || 'Player', identity.photoURL)}<span>${escape(identity.displayName || 'Player')}</span>` : '<span class="status-dot"></span> Guest player';
+  $('#google-sign-in').hidden = identity.signedIn;
+  $('#google-sign-out').hidden = !identity.signedIn;
+  $('#open-rewards').hidden = !identity.signedIn || !!view;
+  const input = $<HTMLInputElement>('#player-name');
+  input.hidden = identity.signedIn; input.required = !identity.signedIn;
+  $('label[for="player-name"]').hidden = identity.signedIn;
+  $('#entry-form .field-note').textContent = identity.signedIn ? `Playing as ${identity.displayName}. Your rewards stay with your account.` : 'Your name is unique at this table. Sign in with Google to keep rewards after the session ends.';
+  $('.entry-bottom span:last-child').textContent = identity.signedIn ? 'Google account · Your rewards stay with you' : 'Guest access · Sessions last 24 hours after activity';
+  setMode(mode);
+  $('#google-sign-in').toggleAttribute('disabled', !initialized || busy || !online);
+}
+function resetEmbeds() {
+  disposeGame?.(); disposeRewards?.(); disposeGame = undefined; disposeRewards = undefined; gameKey = ''; rewardsKey = '';
+}
+async function syncIdentity() {
+  const generation = ++epoch; initialized = false; pending = null; resetEmbeds();
+  // Clear the previous account's private content before any network request.
+  identity = { signedIn: false, rewardsApp: null }; view = null; walletOpen = false;
+  $('#hub').hidden = true; $('#saved-rewards').hidden = true; renderIdentity(); disable();
+  await client.initialize();
+  const next = client.identity ? await client.identity() : { signedIn: false, rewardsApp: null };
+  if (generation !== epoch) return;
+  identity = next;
+  initialized = true; lastPresence = 0; renderIdentity(); await poll();
+}
+async function changeIdentity(signingIn: boolean) {
+  if (busy || changingIdentity || !initialized) return;
+  changingIdentity = true; busy = true; epoch++; disable(); renderIdentity();
+  try { if (signingIn) await client.signIn(); else await client.signOut(); await syncIdentity(); notice(signingIn ? 'Signed in. Your rewards are saved to your account.' : 'Signed out. Your saved rewards remain with your account.'); }
+  catch (error) { notice(error instanceof Error ? error.message : 'Account access failed. Please retry.', true); }
+  finally { busy = false; changingIdentity = false; disable(); renderIdentity(); }
+}
+$('#google-sign-in').onclick = () => void changeIdentity(true);
+$('#google-sign-out').onclick = () => void changeIdentity(false);
+$('#open-rewards').onclick = () => { walletOpen = true; if (view) navigate('rewards'); renderRewards(); $('#saved-rewards').scrollIntoView({ block: 'nearest' }); };
 
 $('#player-name').setAttribute('value', saved('bt-name'));
 const query = new URLSearchParams(location.search);
@@ -55,7 +101,7 @@ function setMode(next: string) {
   $('#join-tab').setAttribute('aria-selected', String(mode === 'join'));
   $('#create-tab').tabIndex = mode === 'create' ? 0 : -1; $('#join-tab').tabIndex = mode === 'join' ? 0 : -1;
   $('#entry-title').textContent = mode === 'create' ? 'Start something good.' : 'Your party is waiting.';
-  $('#entry-description').textContent = mode === 'create' ? 'Create a shared space, then invite your people.' : 'Enter your name and the code your party shared.';
+  $('#entry-description').textContent = mode === 'create' ? 'Create a shared space, then invite your people.' : identity.signedIn ? 'Your Google account name is ready. Enter the code your party shared.' : 'Enter your name and the code your party shared.';
   $('#code-field').hidden = mode !== 'join'; $('#session-code').toggleAttribute('required', mode === 'join');
   $('#entry-submit').innerHTML = `${mode === 'create' ? 'Create a session' : 'Join the session'} ${arrow}`;
 }
@@ -95,15 +141,17 @@ async function run(value: PlayerCommand) {
   if (!online) { notice('You’re offline. Reconnect to update your session.', true); return; }
   const sameIntent = (a: PlayerCommand, b: PlayerCommand) => JSON.stringify({ ...a, requestId: null }) === JSON.stringify({ ...b, requestId: null });
   if (pending && sameIntent(pending, value)) value = pending;
-  pending = value; epoch++; busy = true; disable(); notice('');
+  pending = value; const generation = ++epoch; busy = true; disable(); notice('');
   try {
     const response = await client.command(value);
+    if (generation !== epoch) return;
     pending = null;
     apply(response as SessionView | null);
     if (value.action === 'join' || value.action === 'create') {
       history.replaceState(null, '', location.pathname); lastPresence = 0; await poll();
     }
   } catch (error) {
+    if (generation !== epoch) return;
     const code = (error as { code?: string }).code || '';
     if (!['functions/unavailable', 'functions/deadline-exceeded', 'functions/internal', ''].includes(code)) pending = null;
     notice(error instanceof Error ? error.message.replace(/^Firebase: /, '') : 'That didn’t go through. Please try again.', true);
@@ -111,17 +159,19 @@ async function run(value: PlayerCommand) {
   finally { busy = false; disable(); }
 }
 function disable() {
+  document.querySelectorAll<HTMLButtonElement>('#google-sign-in, #google-sign-out').forEach(button => { button.disabled = busy || !online || !initialized; });
   document.querySelectorAll<HTMLButtonElement>('#entry-submit, #game-content button, #confirm-leave').forEach(button => { button.disabled = busy || !online || !initialized || button.dataset.unavailable === 'true'; });
 }
 function apply(next: SessionView | null) {
   const oldId = view?.session.id; view = next;
+  $('#open-rewards').hidden = !identity.signedIn || !!view;
   if (view) clockOffset = view.serverNow - Date.now();
   if (oldId !== view?.session.id) { inviteCode = ''; $('#leave-confirm').hidden = true; $('#leave-session').hidden = false; navigate('game'); }
   const joiningAnother = !!view && invitationPending && view.session.code !== query.get('join')?.replace(/[\s-]/g, '').toUpperCase();
   $('#welcome').hidden = !!view && !joiningAnother; $('#hub').hidden = !view || joiningAnother;
   returnButton.hidden = !joiningAnother;
-  if (joiningAnother) $('#entry-description').textContent = 'Joining this party will leave your current session. Your name must be unique in the new party.';
-  if (!view) { if (oldId) { disposeGame?.(); gameKey = ''; disposeRewards?.(); rewardsKey = ''; } updateGameLayout(); return; }
+  if (joiningAnother) $('#entry-description').textContent = 'Joining this party will leave your current session.';
+  if (!view) { if (oldId) resetEmbeds(); renderRewards(); updateGameLayout(); return; }
   const s = view.session;
   $('#header-code').textContent = s.code; $('#invite-code').textContent = s.code;
   $('#member-count').textContent = String(s.members.length); $('#roster-count').textContent = String(s.members.length);
@@ -133,21 +183,25 @@ function apply(next: SessionView | null) {
     void QRCode.toDataURL(invite, { width: 336, margin: 2, color: { dark: '#182316', light: '#ffffff' } }).then(url => { if (revision === qrRevision) $<HTMLImageElement>('#invite-qr').src = url; }).catch(() => notice('The QR code could not be generated. You can still share the invitation link.'));
   }
   $('#invite-note').textContent = client.local ? 'Local preview: invite links work on this computer. Phone scanning needs the deployed HTTPS site.' : 'Anyone with this invitation can join. Share it with your party.';
-  paint('#roster', s.members.map(m => `<li><span class="avatar">${escape(m.name.slice(0, 1).toUpperCase())}</span><div><strong>${escape(m.name)}</strong>${m.id === view!.playerId ? '<span class="you">You</span>' : ''}</div><span class="presence ${m.connected ? 'present' : ''}"><span class="status-dot"></span>${m.connected ? 'Connected' : 'Away'}</span></li>`).join(''));
-  $('#expiry-note').textContent = view.expired ? 'This session and its rewards have expired.' : `Expires ${new Date(s.expiresAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} unless someone plays, joins, votes, or uses a reward.`;
+  paint('#roster', s.members.map(m => `<li>${avatar(m.name, m.photoURL)}<div><strong>${escape(m.name)}</strong>${m.id === view!.playerId ? '<span class="you">You</span>' : ''}</div><span class="presence ${m.connected ? 'present' : ''}"><span class="status-dot"></span>${m.connected ? 'Connected' : 'Away'}</span></li>`).join(''));
+  $('#expiry-note').textContent = view.expired ? 'This session has expired. Rewards saved to Google accounts remain available.' : `Session expires ${new Date(s.expiresAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} unless someone plays, joins, votes, or uses a reward. Account rewards do not expire with the session.`;
   paint('#history', s.history.length ? `<ol class="result-list">${[...s.history].reverse().map(r => `<li><strong>${escape(view!.games.find(g => g.id === r.gameId)?.name || r.gameId)}</strong><span>${r.winnerIds.map(uid => escape(s.members.find(m => m.id === uid)?.name || 'Former player')).join(', ') || 'Game completed'}</span><time>${new Date(r.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time></li>`).join('')}</ol>` : '<p class="muted">Your shared game results will appear here. The story is just beginning.</p>');
   renderGame(); renderRewards(); disable(); updateClock();
 }
 function renderRewards() {
-  if (!view) return;
-  const app = view.rewardsApp;
-  const key = !view.expired && app ? `${view.session.id}:${app.embedUrl}:${page === 'reward-history' ? 'history' : 'inventory'}` : '';
+  const historyView = page === 'reward-history' && !!view;
+  const app = view?.rewardsApp ?? identity.rewardsApp;
+  const sessionId = view && !view.expired ? view.session.id : '';
+  const available = !!sessionId || (identity.signedIn && !historyView && (!!view || walletOpen));
+  $('#saved-rewards').hidden = !!view || !identity.signedIn || !walletOpen;
+  const key = available && app?.embedUrl ? `${sessionId}:${identity.playerId || 'guest'}:${app.embedUrl}:${historyView ? 'history' : 'inventory'}` : '';
   if (key === rewardsKey) return;
   disposeRewards?.(); disposeRewards = undefined; rewardsKey = key;
   const host = document.getElementById('rewards-embed') || Object.assign(document.createElement('div'), { id: 'rewards-embed' });
-  (page === 'reward-history' ? $('#reward-history-embed') : $('#page-rewards')).append(host);
+  (!view ? $('#saved-rewards-host') : historyView ? $('#reward-history-embed') : $('#page-rewards')).append(host);
   $('#reward-history-note').hidden = !!key; const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
-  if (key && app) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl); url.searchParams.set('view', page === 'reward-history' ? 'history' : 'inventory'); return url.href; })(), appId: app.id, sessionId: view.session.id, title: page === 'reward-history' ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
+  $('#saved-rewards-note').hidden = !!key;
+  if (key && app?.embedUrl) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl!); url.searchParams.set('view', historyView ? 'history' : 'inventory'); return url.href; })(), appId: app.id, sessionId, title: historyView ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
   host.hidden = !key;
 }
 function renderGame() {
@@ -214,7 +268,15 @@ async function boot() {
   }
   try {
     client = await import('./client'); embed = await import('./embed');
-    await client.initialize(); initialized = true;
+    await client.initialize();
+    await syncIdentity();
+    if (!watchingIdentity && client.observeIdentity) {
+      watchingIdentity = true; let initial = true;
+      client.observeIdentity(() => {
+        if (initial) { initial = false; return; }
+        if (!changingIdentity) void syncIdentity().catch(() => { $('#connection').textContent = 'Account changed. Refresh to reconnect.'; $('#connection').hidden = false; });
+      });
+    }
     $('#environment').textContent = client.local ? 'LOCAL PREVIEW' : '';
     await poll();
   } catch (error) {

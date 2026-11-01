@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -8,6 +9,7 @@ import { GAMES, type Game, type GameCommand, type PlayerCommand, type Session } 
 import { DomainError, assert } from './errors';
 import { HubService, type RegisteredApp } from './service';
 import { FirestoreStore } from './store';
+import { Identities } from './identity';
 
 initializeApp();
 const region = 'us-central1';
@@ -32,7 +34,27 @@ export const playerCommand = onCall({ region, invoker: 'private', ...(runtime ? 
   if (!req.auth) throw new HttpsError('unauthenticated', 'Connect your guest identity first.');
   try {
     assert(JSON.stringify(req.data).length <= 8192, 'invalid-argument', 'Request is too large.');
-    return await config().service.player(req.auth.uid, req.data as PlayerCommand);
+    const { service, apps } = config();
+    const rewards = apps.find(a => a.kind === 'rewards' && a.embedUrl);
+    const rewardsApp = rewards ? { id: rewards.id, embedUrl: rewards.embedUrl! } : null;
+    const identities = new Identities(new FirestoreStore());
+    const googleId = (req.auth.token.firebase?.identities as Record<string, string[]> | undefined)?.['google.com']?.[0];
+    const command = req.data as PlayerCommand;
+    if (command.action === 'identity') {
+      if (!googleId) return { signedIn: false, rewardsApp };
+      const user = await getAuth().getUser(req.auth.uid);
+      const google = user.providerData.find(p => p.providerId === 'google.com' && p.uid === googleId);
+      assert(google?.displayName, 'unauthenticated', 'A verified Google account is required.');
+      const photoURL = google.photoURL && /^https:\/\/[^/]+\.googleusercontent\.com\//.test(google.photoURL) ? google.photoURL : null;
+      return { signedIn: true, ...await identities.signIn(req.auth.uid, { accountId: googleId, displayName: google.displayName, photoURL }, command.claim), rewardsApp };
+    }
+    const playerId = await identities.resolve(req.auth.uid, googleId);
+    if (command.action === 'prepareSignIn') {
+      assert(!googleId, 'failed-precondition', 'Already signed in.');
+      return await identities.prepare(playerId);
+    }
+    if (command.action === 'signOut') { await identities.signOut(playerId); return null; }
+    return await service.player(playerId, command);
   } catch (error) {
     if (error instanceof DomainError) throw new HttpsError(error.code, error.message);
     console.error('Player command failed', error instanceof Error ? error.name : 'Unknown');
@@ -58,6 +80,20 @@ export const integrationApi = onRequest({ region, ...(runtime ? { serviceAccount
       app = apps.find(a => a.serviceAccount === identity.email);
     }
     assert(app, 'permission-denied', 'This backend is not registered.');
+    if (req.body.action === 'rewardTransfers' || req.body.action === 'ackRewardTransfer') {
+      assert(app.kind === 'rewards', 'permission-denied', 'Only Rewards may manage transfers.');
+      const db = getFirestore();
+      if (req.body.action === 'rewardTransfers') {
+        const accountId = req.body.accountId;
+        assert(accountId === undefined || (typeof accountId === 'string' && /^[\w-]{1,128}$/.test(accountId)), 'invalid-argument', 'Invalid account ID.');
+        const collection = db.collection('rewardTransfers');
+        const jobs = await (accountId ? collection.where('accountId', '==', accountId) : collection).limit(50).get();
+        res.json({ result: jobs.docs.map(d => d.data()) }); return;
+      }
+      assert(typeof req.body.transferId === 'string' && /^[a-f0-9]{64}$/.test(req.body.transferId), 'invalid-argument', 'Invalid transfer ID.');
+      await db.doc(`rewardTransfers/${req.body.transferId}`).delete();
+      res.json({ result: { accepted: true } }); return;
+    }
     res.json({ result: await service.game(app.id, req.body as GameCommand) });
   } catch (error) {
     const domain = error instanceof DomainError;
@@ -83,7 +119,7 @@ export async function maintain() {
       tx.delete(doc.ref);
     });
   }
-  for (const collection of ['grants', 'receipts']) {
+  for (const collection of ['grants', 'receipts', 'identityClaims']) {
     const old = await db.collection(collection).where('expiresAt', '<=', now).limit(300).get();
     if (old.empty) continue;
     const batch = db.batch(); old.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit();

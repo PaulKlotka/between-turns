@@ -10,7 +10,7 @@ test('embedded game fits desktop viewports and survives navigation without clipp
       expiresAt: now + 86400000, members: [{ id: 'alice', name: 'Alice', connected: true }],
       ballot: null, run: { id: 'run', gameId: 'bingo', startedAt: now }, history: [], revision: 1 },
   };
-  await page.route('**/src/client.ts', route => route.fulfill({ contentType: 'text/javascript', body: `
+  await page.route('**/src/client.ts*', route => route.fulfill({ contentType: 'text/javascript', body: `
     export const local = true;
     export async function initialize() {}
     export async function command(value) { return value.action === 'connect' ? {token:'test',expiresAt:Date.now()+60000} : ${JSON.stringify(view)}; }
@@ -40,7 +40,7 @@ test('embedded game fits desktop viewports and survives navigation without clipp
       expect(await page.frameLocator('#game-embed iframe').locator('body').evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }).toPass();
   }
-  await page.getByRole('button', { name: /^Session/ }).click();
+  await page.getByRole('button', { name: /^Session \d/ }).click();
   await expect(page.locator('body')).not.toHaveClass(/playing-game/);
   await page.getByRole('button', { name: 'Current Game', exact: true }).click();
   await expect(frame).toHaveCount(1);

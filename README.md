@@ -2,6 +2,8 @@
 
 A phone-friendly session hub for games around the RPG table. Between Turns owns guest identity, shared sessions, voting, and navigation. Games validate gameplay; RPG Rewards will manage the session-wide reward inventory.
 
+Local November 1 update: optional Google login supplies account names/photos and permanent Rewards inventory. Live guest awards transfer in place when signing in; My Rewards remains available after sessions end. The coordinated changes include the sibling Bingo and Rewards repositories. See [authentication and release instructions](docs/AUTHENTICATION.md); these changes have not been deployed.
+
 The existing `rpg-bingo` and `rpg-rewards` repositories and deployments are not modified. Both appear as integration placeholders in this release. No game is marked playable until its backend and embedded UI implement [the integration contract](docs/INTEGRATION.md).
 
 Live application: https://between-turns-paul.web.app. Guest identity, shared sessions, invitations, navigation, and the session backend are deployed. Bingo and Rewards remain integration placeholders. See [deployment status](docs/DEPLOYMENT.md).
@@ -30,11 +32,11 @@ The final command starts isolated emulators, runs real Firestore concurrency and
 
 ## Player experience
 
-- Every player is a persistent browser guest, with no signup or owner privileges. Clearing browser data creates a different guest; cross-device recovery is outside this release.
+- Players may remain browser guests or sign in with Google for account names/photos and rewards that survive sessions and work across devices. Guests retain browser-local identity; clearing browser data creates a different guest. Accounts confer no owner privileges.
 - Create a shared session, or join by QR, link, or a 15-character code. Names are unique within a session after Unicode normalization, case folding, and whitespace cleanup. Sessions support up to 32 players.
 - One guest belongs to one session at a time. Switching membership is atomic; a failed join preserves the old membership. Any player can start the first selection. Late arrivals immediately enter the active game.
 - Current Game, My Rewards, and Session views share one application shell. Navigation preserves an active embedded game's iframe.
-- Sessions and their rewards expire 24 hours after the latest meaningful accepted activity by any member. Presence, polling, reading, refreshes, handoffs, duplicate retries, and automatic transitions do not extend expiry.
+- Sessions and guest rewards expire 24 hours after the latest meaningful accepted activity by any member. Google-owned rewards do not expire with sessions. Presence, polling, reading, refreshes, authentication, handoffs, duplicate retries, and automatic transitions do not extend session expiry.
 - Leaving an empty session closes it. There is no session creator role, kick control, or administrator UI.
 
 ## Selection rules

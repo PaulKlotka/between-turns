@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-const env = { ...process.env, XDG_CONFIG_HOME: path.resolve('.firebase-config'), FIREBASE_EMULATORS_PATH: path.resolve('.emulator-cache'), NODE_USE_SYSTEM_CA: '1' };
+const env = { ...process.env, XDG_CONFIG_HOME: path.resolve('.firebase-config'), APPDATA: path.resolve('.firebase-config/appdata'), FIREBASE_EMULATORS_PATH: path.resolve('.emulator-cache'), NODE_USE_SYSTEM_CA: '1' };
 const java = 'C:/Program Files/Android/Android Studio/jbr/bin';
 if (process.platform === 'win32' && existsSync(path.join(java, 'java.exe'))) env.PATH = `${java};${env.PATH}`;
 const verify = process.argv[2] === 'verify';

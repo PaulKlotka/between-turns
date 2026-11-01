@@ -2,10 +2,12 @@ import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { GAMES, MAX_MEMBERS, PRESENCE_TTL, SESSION_TTL, VERSION, VOTE_DURATION, type Ballot, type ConnectionContext, type Game, type GameCommand, type Grant, type PlayerCommand, type PlayerResponse, type Session, type SessionView } from '../../shared/types';
 import { assert } from './errors';
 import type { Store, Transaction } from './store';
+import { accountContext } from './identity';
+import type { AccountProfile } from '../../shared/types';
 
 interface Pointer { sessionId: string | null; }
 interface Receipt { fingerprint: string; sessionId?: string; expiresAt: number; }
-interface StoredGrant { appId: string; uid: string; sessionId: string; runId: string | null; nonce: string; expiresAt: number; }
+interface StoredGrant { appId: string; uid: string; sessionId: string; runId: string | null; nonce: string; expiresAt: number; accountVersion?: number; accountId?: string | null; }
 export interface RegisteredApp { id: string; kind: 'game' | 'rewards'; origin: string; embedUrl?: string; }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const fingerprint = (value: unknown) => hash(JSON.stringify(value));
@@ -33,7 +35,7 @@ export class HubService {
   private view(s: Session, uid: string, now: number): SessionView {
     const { members, ...session } = s;
     const rewards = this.apps.find(a => a.kind === 'rewards' && a.embedUrl);
-    return { session: { ...session, members: Object.values(members).map(m => ({ id: m.id, name: m.name, connected: connected(s, m.id, now) })) }, playerId: uid, expired: !active(s, now), serverNow: now, games: this.games, rewardsApp: rewards?.embedUrl ? { id: rewards.id, embedUrl: rewards.embedUrl } : null };
+    return { session: { ...session, members: Object.values(members).map(m => ({ id: m.id, name: m.name, photoURL: m.photoURL ?? null, connected: connected(s, m.id, now) })) }, playerId: uid, expired: !active(s, now), serverNow: now, games: this.games, rewardsApp: rewards?.embedUrl ? { id: rewards.id, embedUrl: rewards.embedUrl } : null };
   }
   private save(tx: Transaction, s: Session) { s.revision++; tx.set(`sessions/${s.id}`, s); }
   private select(s: Session, now: number, initiator?: string) {
@@ -84,6 +86,14 @@ export class HubService {
     return this.store.transaction(async tx => {
       const now = this.now();
       const pointer = await tx.get<Pointer>(`players/${uid}`);
+      if (command.action === 'accountConnect') {
+        const app = this.apps.find(a => a.id === command.appId && a.kind === 'rewards');
+        assert(app, 'permission-denied', 'Rewards is not connected yet.');
+        const c = await accountContext(tx, uid, now);
+        const token = randomBytes(32).toString('base64url'), expiresAt = now + 60000;
+        tx.set(`grants/${hash(token)}`, { appId: app.id, uid, sessionId: '', runId: null, nonce: id(command.nonce), expiresAt, accountVersion: c.accountVersion });
+        return { token, expiresAt };
+      }
       if (command.action === 'current') {
         if (!pointer?.sessionId) return null;
         const s = await tx.get<Session>(`sessions/${pointer.sessionId}`);
@@ -101,7 +111,8 @@ export class HubService {
           assert(pointer?.sessionId === prior.sessionId, 'failed-precondition', 'This invitation request has already been completed.');
           return this.view(await this.session(tx, uid, prior.sessionId!, now, true), uid, now);
         }
-        const display = name(command.name);
+        const identity = await tx.get<AccountProfile>(`identities/${uid}`);
+        const display = identity ? { name: identity.displayName, nameKey: identity.displayName.normalize('NFKC').toLocaleLowerCase('en-US') } : name(command.name);
         let s: Session;
         if (command.action === 'create') {
           // 60 random bits; reserve the code transactionally and retry on collision.
@@ -119,10 +130,10 @@ export class HubService {
           if (s.members[uid]) return this.view(s, uid, now);
           assert(Object.keys(s.members).length < MAX_MEMBERS, 'resource-exhausted', `This session is full (${MAX_MEMBERS} players).`);
         }
-        assert(!Object.values(s.members).some(m => m.nameKey === display.nameKey), 'already-exists', 'That name is already taken in this session. Choose another.');
+        assert(identity || !Object.values(s.members).some(m => m.nameKey === display.nameKey), 'already-exists', 'That name is already taken in this session. Choose another.');
         // Validate destination before atomically leaving the old session.
         await this.detach(tx, uid, pointer, now);
-        s.members[uid] = { id: uid, ...display, joinedAt: now, connections: {} };
+        s.members[uid] = { id: uid, ...display, photoURL: identity?.photoURL ?? null, joinedAt: now, connections: {} };
         touch(s, now); this.save(tx, s);
         tx.set(`players/${uid}`, { sessionId: s.id });
         tx.set(receiptPath, { fingerprint: fp, sessionId: s.id, expiresAt: now + 7 * SESSION_TTL });
@@ -180,7 +191,8 @@ export class HubService {
     assert(app, 'permission-denied', 'That application is not connected yet.');
     if (app.kind === 'game') assert(s.phase === 'playing' && s.run?.gameId === app.id && s.run.id === command.runId, 'failed-precondition', 'That game is not active.');
     const nonce = id(command.nonce, 'Connection nonce'); const token = randomBytes(32).toString('base64url');
-    const grant: StoredGrant = { appId: app.id, uid, sessionId: s.id, runId: app.kind === 'game' ? s.run!.id : null, nonce, expiresAt: now + 60_000 };
+    const identity = await tx.get<AccountProfile>(`identities/${uid}`);
+    const grant: StoredGrant = { appId: app.id, uid, sessionId: s.id, runId: app.kind === 'game' ? s.run!.id : null, nonce, expiresAt: now + 60_000, accountId: identity?.accountId ?? null };
     tx.set(`grants/${hash(token)}`, grant);
     return { token, expiresAt: grant.expiresAt };
   }
@@ -191,14 +203,27 @@ export class HubService {
     assert(command && typeof command === 'object', 'invalid-argument', 'A command is required.');
     return this.store.transaction(async tx => {
       const now = this.now();
+      if (command.action === 'accountContext') {
+        assert(app.kind === 'rewards', 'permission-denied', 'Only Rewards may access account inventory.');
+        id(command.playerId);
+        assert(Number.isInteger(command.accountVersion), 'invalid-argument', 'Account version is required.');
+        return accountContext(tx, command.playerId, now, command.accountVersion);
+      }
       if (command.action === 'exchange') {
         const token = text(command.token, 'Connection grant');
         const path = `grants/${hash(token)}`; const grant = await tx.get<StoredGrant>(path);
         assert(grant && grant.appId === appId && grant.nonce === command.nonce && grant.expiresAt > now, 'permission-denied', 'Connection grant is invalid or expired.');
+        if (!grant.sessionId) {
+          assert(app.kind === 'rewards', 'permission-denied', 'Account grants are only for Rewards.');
+          const c = await accountContext(tx, grant.uid, now, grant.accountVersion);
+          tx.delete(path); return c;
+        }
         const s = await this.session(tx, grant.uid, grant.sessionId, now);
+        const identity = await tx.get<AccountProfile>(`identities/${grant.uid}`);
+        assert((grant.accountId ?? null) === (identity?.accountId ?? null), 'unauthenticated', 'Identity changed. Reconnect the game.');
         if (app.kind === 'game') assert(s.run?.id === grant.runId && s.run.gameId === appId && s.phase === 'playing', 'failed-precondition', 'That game has ended.');
         tx.delete(path);
-        return this.context(s, grant.uid, app.kind);
+        return this.context(s, grant.uid, app.kind, await tx.get<AccountProfile>(`identities/${grant.uid}`));
       }
       assert('sessionId' in command, 'invalid-argument', 'Unknown integration command.');
       const sid = id(command.sessionId, 'Session ID');
@@ -208,7 +233,7 @@ export class HubService {
         const member = await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
         if (app.kind === 'game') assert(member.run?.gameId === appId && member.run.id === command.runId, 'permission-denied', 'Game instance is not active.');
         if (app.kind === 'rewards' && command.runId) assert(member.phase === 'playing' && member.run?.id === command.runId && member.run.gameId === command.gameId, 'permission-denied', 'Game instance is not active.');
-        return this.context(member, command.playerId, command.runId ? 'game' : app.kind);
+        return this.context(member, command.playerId, command.runId ? 'game' : app.kind, await tx.get<AccountProfile>(`identities/${command.playerId}`));
       }
       const eventId = id(command.eventId, 'Event ID');
       const path = `receipts/${hash(`${appId}:${sid}:${eventId}`)}`;
@@ -229,8 +254,8 @@ export class HubService {
       return { accepted: true };
     });
   }
-  private context(s: Session, uid: string, kind: RegisteredApp['kind']): ConnectionContext {
-    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt };
+  private context(s: Session, uid: string, kind: RegisteredApp['kind'], identity: AccountProfile | null = null): ConnectionContext {
+    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt };
   }
   async settleSession(sessionId: string) {
     return this.store.transaction(async tx => {

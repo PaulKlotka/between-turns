@@ -3,11 +3,10 @@ import type { publicView } from '../functions/src/race';
 type View=ReturnType<typeof publicView>;
 const root=document.querySelector<HTMLDivElement>('#app')!;
 root.innerHTML=`<main><header><div><span class="eyebrow">BETWEEN TURNS · TREASURE RACE</span><h1>Push Your Luck</h1></div><span id="mode" class="pill">Connect to play</span></header>
-<section class="game" hidden><section class="treasure" aria-label="Your treasure"><div class="totals"><div><span class="eyebrow">BANKED · SAFE</span><strong id="banked">0</strong><span>of 100 treasure</span></div><div class="risk"><span class="eyebrow">AT RISK</span><strong id="risk">0</strong><span>lost on a natural 1</span></div></div><progress id="progress" max="100" value="0" aria-label="Banked treasure toward goal"></progress><button id="bank" class="primary">Bank treasure</button><p id="collecting" class="hint"></p><button id="undo-bank" class="subtle" hidden>Undo bank</button></section>
+<section class="game" hidden><section class="treasure" aria-label="Treasure race"><div class="section-heading"><h2>Treasure race</h2><span class="goal">Goal: 100</span></div><div class="legend"><span class="safe-key">Banked</span><span class="risk-key">At risk</span></div><div id="standings"></div><button id="bank" class="primary">Bank treasure</button><p id="collecting" class="hint"></p><button id="undo-bank" class="subtle" hidden>Undo bank</button></section>
 <section class="roll-panel" aria-label="Record a physical d20 roll"><div class="section-heading"><h2>Record your d20</h2><span id="roll-count" class="pill"></span></div><p class="hint">The player who rolled should enter the result.</p><div id="grid" class="grid"></div><div class="latest"><div><span class="eyebrow">LATEST ROLL</span><p id="last">Waiting for the first roll</p></div><button id="undo-roll" class="subtle" title="Restores treasure before this roll, including any banks made afterward" hidden>Undo roll</button></div><p id="roll-note" class="hint"></p></section>
-<section class="leaderboard" aria-label="Treasure standings"><h2>Treasure standings</h2><div class="table-head"><span>Player</span><span>Banked</span><span>At risk</span></div><div id="standings"></div><p id="more-players" class="hint"></p></section>
 <section class="reward"><span class="eyebrow">RACE REWARD</span><strong id="reward"></strong><p id="benefit"></p></section>
-<aside class="rules"><span><b>1</b> Lose at risk</span><span><b>2–19</b> Add treasure</span><span><b>20</b> Add + auto-bank</span><span>Manual bank skips one roll</span></aside></section>
+<aside class="rules"><span><b>1</b> Lose at risk</span><span><b>2–19</b> Add treasure</span><span><b>20</b> Add + auto-bank</span><span>Bank clears toxic numbers and skips one roll</span></aside></section>
 <div id="result" class="result" hidden aria-live="polite"></div><p id="status" role="status">Connecting to Between Turns…</p><button id="retry" class="subtle" hidden>Retry</button></main>`;
 const $=<T extends HTMLElement>(s:string)=>root.querySelector<T>(s)!;
 const params=new URLSearchParams(location.search),origin=params.get('btParentOrigin') ?? '',nonce=params.get('btNonce') ?? '';
@@ -21,21 +20,35 @@ function fail(e:unknown){status.textContent=e instanceof Error?e.message:'Unable
 function render(){
  if(!view)return;
  $('.game').hidden=false;const me=view.players.find(p=>p.id===view!.playerId);
- $('#mode').textContent=view.mode==='solo'?'Solo · 15 rolls':'Multiplayer · first to 100';
- $('#banked').textContent=String(me?.banked ?? 0);$('#risk').textContent=String(me?.atRisk ?? 0);$<HTMLProgressElement>('#progress').value=me?.banked ?? 0;
+ $('#mode').textContent=view.mode==='solo'?`Solo � ${view.rollLimit} rolls`:'Multiplayer � first to 100';
  const blocked=busy || !!pending,bankButton=$<HTMLButtonElement>('#bank');
  bankButton.textContent=me?.skipNext?'Sitting out the next roll':me?.atRisk?`Bank ${me.atRisk} treasure`:'Bank treasure';bankButton.disabled=blocked || !view.canBank;
  $('#collecting').textContent=me?.skipNext?'Your treasure is safe. Collecting resumes after the next roll.':'Keep going is automatic. Bank to protect your treasure and skip one roll.';
  $('#roll-count').textContent=view.rollLimit?`Roll ${view.rollCount} / ${view.rollLimit}`:`Roll ${view.rollCount}`;
- grid.querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.disabled=blocked || !view!.canRoll);
+ grid.querySelectorAll<HTMLButtonElement>('button').forEach(b=>{const n=Number(b.textContent);const toxic=me?.toxicNumbers.includes(n) ?? n===1;b.classList.toggle('toxic',toxic);b.setAttribute('aria-label',`Enter roll ${n}${toxic?' (toxic for you)':''}`);b.disabled=blocked || !view!.canRoll;});
  $('#last').textContent=view.last?`${view.last.roll} · ${view.last.name}`:'Waiting for the first roll';
- $('#roll-note').textContent=view.phase!=='playing'?'Rolls and banking are paused.':view.canRoll?'Enter the unmodified die result. Each recorded roll affects everyone collecting.':'Wait for another player to record a roll. You can still bank your treasure.';
+ $('#roll-note').textContent=view.phase!=='playing'?'Rolls and banking are paused.':view.canRoll?'Enter the unmodified die result. Each recorded roll affects everyone collecting.':'Wait for another player to roll or bank. You can still bank your treasure.';
  for(const kind of ['roll','bank'] as const){const button=$<HTMLButtonElement>(`#undo-${kind}`);button.hidden=!(kind==='roll'?view.canUndoRoll:view.canUndoBank);button.disabled=blocked || (view.phase==='review' && Date.now()+clockOffset>=(view.reviewUntil ?? 0));}
  $('#reward').textContent=view.offer?.reward.name ?? 'Preparing reward…';$('#benefit').textContent=view.offer?.reward.qualifyingRoll ?? '';
  const standings=$('#standings');standings.replaceChildren();
- const shown=view.players.slice(0,5);if(me && !shown.some(p=>p.id===me.id))shown.push(me);
- for(const player of shown){const row=document.createElement('div');row.className=`standing${player.id===view.playerId?' me':''}`;const name=document.createElement('span');name.textContent=`${player.name}${player.id===view.playerId?' (you)':''}${player.skipNext?' · skipping':''}`;const banked=document.createElement('strong');banked.textContent=String(player.banked);const risk=document.createElement('span');risk.textContent=String(player.atRisk);row.append(name,banked,risk);standings.append(row);}
- $('#more-players').textContent=view.players.length>shown.length?`${view.players.length} players in this race · showing leaders and you`:'';
+ for(const player of view.players){
+  const row=document.createElement('div');row.className=`race-row${player.id===view.playerId?' me':''}`;
+  const label=document.createElement('div');label.className='race-label';
+  const name=document.createElement('span');name.textContent=`${player.name}${player.id===view.playerId?' (you)':''}${player.skipNext?' � skipping':''}`;
+  const values=document.createElement('span');values.textContent=`${player.banked} banked � ${player.atRisk} at risk`;
+  label.append(name,values);
+  const track=document.createElement('div');track.className='race-track';track.setAttribute('role','img');track.setAttribute('aria-label',`${player.name}: ${player.banked} banked and ${player.atRisk} at risk, goal ${view.target}`);
+  const safe=document.createElement('div');safe.className='bar-safe';safe.style.width=`${Math.min(100,player.banked/view.target*100)}%`;
+  const risk=document.createElement('div');risk.className='bar-risk';risk.style.width=`${Math.min(100-Math.min(100,player.banked/view.target*100),player.atRisk/view.target*100)}%`;
+  track.append(safe,risk);const toxic=document.createElement('div');toxic.className='toxic-list';toxic.textContent=`Toxic: ${[...player.toxicNumbers].sort((a,b)=>a-b).join(', ')}`;row.append(label,track,toxic);standings.append(row);
+ }
+ if(view.mode==='solo' && view.rollLimit){
+  const row=document.createElement('div');row.className='race-row turn-row';
+  const label=document.createElement('div');label.className='race-label';
+  const name=document.createElement('span');name.textContent='Turns';const values=document.createElement('span');values.textContent=`${view.rollCount} / ${view.rollLimit} rolls`;label.append(name,values);
+  const track=document.createElement('div');track.className='race-track';track.setAttribute('role','progressbar');track.setAttribute('aria-label','Turns taken');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax',String(view.rollLimit));track.setAttribute('aria-valuenow',String(Math.min(view.rollCount,view.rollLimit)));
+  const fill=document.createElement('div');fill.className='bar-turns';fill.style.width=`${Math.min(100,view.rollCount/view.rollLimit*100)}%`;track.append(fill);row.append(label,track);standings.append(row);
+ }
  const result=$('#result');result.hidden=view.phase==='playing';
  const names=view.players.filter(p=>view!.winnerIds.includes(p.id)).map(p=>p.name).join(' & ');
  if(!result.hidden)result.textContent=view.winnerIds.length?`${names || 'Winner'} ${view.winnerIds.length>1?'win':'wins'}! ${view.offer?.reward.name ?? ''}`:`Solo complete · ${me?.banked ?? 0} / 100 banked treasure`;

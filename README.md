@@ -10,7 +10,7 @@ A physical-d20 treasure game embedded in Between Turns. Between Turns owns ident
 - Start solo when one player is connected. Admitting a second participant changes the race to multiplayer with no roll limit. A multiplayer race remains multiplayer when players disconnect or leave.
 - Encourage the physical roller to enter the unmodified result. One player cannot record consecutive rolls while multiple players are connected. With one connected player, consecutive rolls are permitted in either mode.
 - All current participants collect the shared rolls, including disconnected participants. New participants start at zero. Offline session members who have never participated are not entered into a new solo race.
-- The first manual bank reaching 100 wins. When a shared roll sends multiple players over 100, the highest banked total wins; equal highest totals are joint winners. Joint winners receive the same offered prize.
+- When any player banks at least 100, all players automatically bank their remaining treasure. The highest final banked total wins; equal highest totals are joint winners. Joint winners receive the same offered prize.
 - Undo the latest roll until another roll is accepted, or undo your own manual bank until the next roll. Only the roll submitter can undo that roll. Undoing a roll reverses treasure effects and any banks made from that roll afterward; the server restores the pre-roll state. Undo is one level and never resurrects departed members.
 - Winning rolls, winning banks and solo failures all get a 15-second review. Rolls and banking pause during review. Only the triggering action can be undone, before the server deadline. Then settle any rewards and report completion to Between Turns. The game never chooses or starts its own next race.
 
@@ -41,5 +41,6 @@ See [integration](docs/INTEGRATION.md), [deployment](docs/DEPLOYMENT.md) and [ve
 
 ## Release status
 
-Implemented and verified locally. Firebase authentication is complete and the new project `push-your-luck-paul` has been created. Google rejected linkage to the existing billing account with `FAILED_PRECONDITION / QuotaFailure: Cloud billing quota exceeded`. Billing is disabled on the new project, so backend deployment and live integration are pending quota resolution. Existing live registries and deployments remain unchanged.
+Deployed and enabled in Between Turns: https://between-turns-paul.web.app. The separate Firebase project is push-your-luck-paul. Live guest play in a normal Edge browser verified the hub handoff, banking and undo, skipped roll, natural-1 bust, natural-20 auto-banking, win review, Rewards inventory/history and next-game vote. The temporary session was left after testing. The browser API permits public HTTP transport as approved; gameplay still requires a verified hub grant and protected server-bound credential. Cross-project APIs and scheduled maintenance remain private.
 
+FreeH2O was downgraded to Spark as requested. Roll Race remains billed, and Push Your Luck uses the freed slot. See [release evidence](docs/RELEASE.md) for validation and remaining limits.

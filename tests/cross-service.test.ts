@@ -53,6 +53,6 @@ test('late member starts zero, mode upgrades and exact tied winners get same rea
  const current=await f.hub.player(f.player,{action:'current'}) as SessionView;assert.deepEqual([...current.session.history.at(-1)!.winnerIds].sort(),[f.player,other].sort());
 });
 test('solo failure completes through real hub without granting a reward',async()=>{
- const f=await fixture();await f.ref.update({rollCount:14});const loss=await f.service.command(f.credential,{action:'roll',roll:2,requestId:'last'});assert.equal(loss.phase,'review');assert.deepEqual(loss.winnerIds,[]);f.advance();await f.service.maintain();await f.service.maintain();
+ const f=await fixture();await f.ref.update({rollCount:9});const loss=await f.service.command(f.credential,{action:'roll',roll:2,requestId:'last'});assert.equal(loss.phase,'review');assert.deepEqual(loss.winnerIds,[]);f.advance();await f.service.maintain();await f.service.maintain();
  assert.equal((await db.collection(`centralSessions/${f.sid}/awards`).get()).size,0);const state=await f.hub.player(f.player,{action:'current'}) as SessionView;assert.deepEqual(state.session.history.at(-1)?.winnerIds,[]);assert.notEqual(state.session.run?.id,f.runId);
 });

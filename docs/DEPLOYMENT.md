@@ -1,6 +1,6 @@
 # Deployment
 
-Status: Firebase authentication succeeded and `push-your-luck-paul` was created on November 13, 2026. Billing activation was rejected with HTTP 400 `FAILED_PRECONDITION`, `google.rpc.QuotaFailure`, description `Cloud billing quota exceeded` for billing account `01FBB3-563C94-99B565`. The new project has billing disabled. No live game registrations or deployments have changed. Intended URL (not yet live): https://push-your-luck-paul.web.app.
+Status: Deployed and enabled in Between Turns. FreeH2O is on Spark, Roll Race remains billed and Push Your Luck is billed. Browser transport approval was granted and applied; gameplay remains protected by the central grant exchange. All functions are ACTIVE and the minute job is ENABLED. See [release evidence](RELEASE.md).
 
 ## Authenticate
 
@@ -34,3 +34,11 @@ The local tests use isolated source copies; they do not prove production IAM, bi
 
 Run `node --use-system-ca scripts/provision.cjs` to retry billing linkage and provision APIs, runtime IAM and Firestore. Reread and merge live registries with `node --use-system-ca scripts/prepare-live-config.cjs` before any integration deploy. This prepares ignored staged environment files with the new game disabled, plus a Hosting frame policy derived from the actual live response. It does not change live services. The staged hub frontend has its production configuration copied from the existing checkout. Continue the deployment and live verification steps above, and only enable the game after verification.
 
+
+## Deployment evidence and remaining final step
+
+Both new functions are healthy; the minute schedule is ENABLED. The hub roster extension and merged registrations are deployed; its frame policy includes the game. Hosting releases completed for the new game and hub. Windows shell discovery was bypassed using scripts/generate-manifest.cjs to generate SDK manifests from compiled code, followed by deployment with ignored firebase.deploy.json files without shell hooks. Regenerate manifests after every build before future deployments.
+
+Optional artifact deletion was rejected by automatic approval review, so no retention policy was enabled. Firebase CLI reported that the functions deployed successfully but returned a cleanup-policy error; Hosting was then published separately. This is not a function rollout failure.
+
+Completed: user approved public HTTP transport for only the game browser endpoint. It is applied, and the normal connected Edge browser verified gameplay, reward settlement and next-game voting without a debug bypass. All three hub functions have ready:true for Push Your Luck. The hub policy was repaired to permit the documented reCAPTCHA connect path; App Check remains enforced. See RELEASE.md for evidence and limits.

@@ -157,3 +157,9 @@ artifacts/
 
 
 .firebase-config/
+
+firebase.deploy.json
+
+.tools/
+
+functions/functions.yaml

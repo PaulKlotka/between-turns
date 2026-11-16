@@ -1,6 +1,6 @@
 # Local verification — November 13, 2026
 
-Implemented in `C:\GitHub\push-your-luck`. Firebase reauthentication succeeded and the new project exists. Billing activation is blocked by Google billing project quota (`QuotaFailure`); there is no live game release yet.
+Implemented in `C:\GitHub\push-your-luck`. Production deployment is complete and the game is enabled. The approved public browser transport is active, while gameplay authorization and App Check remain enforced.
 
 - 20 domain tests: supplied three-player example, natural 1 and 20, manual-bank sit-out, solo final auto-bank, final-roll win/loss review, highest-score/tie winners, turn limits, offline collection, late joins, permanent multiplayer mode, undo snapshots and exact deadlines.
 - 14 Firestore-emulator tests: concurrent roll/bank and undo races, duplicate requests and changed-payload rejection, paused submissions, lost settlement/completion responses, connection nonce binding/replay, expired/departed/account-changed credentials, stale bank/undo commands, direct browser read/write denial, actual hub grant exchange, Google-account reward ownership, joint awards and solo loss completion. Tests use the current sibling hub and Rewards service implementations in isolated source copies.
@@ -8,5 +8,4 @@ Implemented in `C:\GitHub\push-your-luck`. Firebase reauthentication succeeded a
 - Production frontend/Functions build and strict TypeScript checks pass. The staged hub and Rewards Functions also typecheck. The hub source patch passes `git apply --check --unidiff-zero --ignore-space-change` against the current sibling checkout.
 - Desktop screenshot visually reviewed: all totals, roll buttons, bank/undo, standings, prize and status are visible. Screenshots and disposable emulator output are under ignored `artifacts/`.
 
-Remaining live checks: create/verify Firebase project and billing, deploy new app and integration configuration, verify IAM and Hosting policies/schedules, exercise guest and real Google-account play through the deployed hub, verify reward settlement and existing games, then mark the new game ready.
-
+Live checks completed in the normal connected Edge browser: game selection, iframe handoff, reward offer, banking and bank undo, sit-out, natural 1, natural 20, 15-second result review, inventory/history award and the next-game vote. The temporary test session was left. All deployed functions are ACTIVE, the minute job is ENABLED, and original invoker registrations were preserved. See RELEASE.md for the detailed evidence and validation limits.

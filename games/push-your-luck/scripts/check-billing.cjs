@@ -1,0 +1,2 @@
+const {api}=require('./cloud-admin.cjs');
+(async()=>{try{await api('https://cloudbilling.googleapis.com','put','/v1/projects/push-your-luck-paul/billingInfo',{billingAccountName:'billingAccounts/01FBB3-563C94-99B565'});}catch(e){console.log(JSON.stringify({message:e.message,status:e.status,body:e.context?.body,response:e.context?.response?.body,original:e.original?.response?.data}));}console.log(JSON.stringify(await api('https://cloudbilling.googleapis.com','get','/v1/projects/push-your-luck-paul/billingInfo')));})().catch(e=>{console.error(e.message);process.exitCode=1});

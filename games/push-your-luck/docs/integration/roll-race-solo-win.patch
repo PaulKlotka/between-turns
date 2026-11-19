@@ -1,0 +1,125 @@
+diff --git a/README.md b/README.md
+index 8746db4..fa7bbdd 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ Roll Race is an embedded Between Turns game. It accepts physical d20 results only; the shared sequence and its length remain in server-side Firestore, which denies all direct browser access. Between Turns owns the player, session, active run and next-game choice. RPG Rewards supplies and settles the offer.
+ 
+-Each race chooses a uniform random length from 3–7. Each challenge independently selects one of seven categories with equal probability: low (1–5), medium (6–10), high (11–15), very high (16–20), even, odd, or an exact number uniformly chosen from 1–20. Existing races retain their original challenge definitions. Definitions are displayed on the current challenge. Each press submits one physical roll. In multiplayer, a player can undo the most recent roll until another player submits a roll; the prior player waits for another submission before entering again. Solo players cannot undo and can roll again immediately. A multiplayer winning roll starts a 15-second review; the winner can undo during that window and other submissions are ignored. A solo winning roll settles immediately. Concurrent submissions and undo serialize on the race document, and stable receipts prevent replay.
++Each race chooses a uniform random length from 3–7. Each challenge independently selects one of seven categories with equal probability: low (1–5), medium (6–10), high (11–15), very high (16–20), even, odd, or an exact number uniformly chosen from 1–20. Existing races retain their original challenge definitions. Definitions are displayed on the current challenge. Each press submits one physical roll. In multiplayer, a player can undo the most recent roll until another player submits a roll; the prior player waits for another submission before entering again. Solo players cannot undo and can roll again immediately. A multiplayer winning roll starts a 15-second review; the winner can undo during that window and other submissions are ignored. A solo winning roll displays the winner and offered reward for 15 seconds before settlement and hub completion; solo undo remains disabled. Concurrent submissions and undo serialize on the race document, and stable receipts prevent replay.
+ 
+ The game draws one Rewards offer for the run, freezes the winner and persists settlement work in the race document. Settlement and central completion use stable IDs; a scheduled worker and browser polling retry failures. Completion is sent only after the Rewards receipt is persisted. The server revalidates central membership before player operations. The browser holds only a short-lived opaque connection credential in memory and exchanges the hub's one-use grant server-side.
+ 
+diff --git a/functions/src/race.ts b/functions/src/race.ts
+index de1d1ea..35489d7 100644
+--- a/functions/src/race.ts
++++ b/functions/src/race.ts
+@@ -29,7 +29,7 @@ export function applyRolls(race: Race, playerId: string, name: string, rolls: nu
+     if (success && ++index === race.challenges.length) { settlement = {winnerId:playerId,eventId,receipt:null}; break; }
+   }
+   const undo = memberCount > 1 ? {playerId,index:race.index,last:race.last} : null;
+-  return {...race,index,phase:settlement ? (undo ? 'review' : 'settling') : 'playing',settlement,revision:race.revision+1,last:{playerId,name,results},undo,reviewUntil:settlement && undo ? now+15000 : null};
++  return {...race,index,phase:settlement ? 'review' : 'playing',settlement,revision:race.revision+1,last:{playerId,name,results},undo,reviewUntil:settlement ? now+15000 : null};
+ }
+ export function undoRoll(race: Race, playerId: string, memberCount: number, now: number): Race {
+   if (memberCount <= 1 || !race.undo || race.undo.playerId !== playerId || !['playing','review'].includes(race.phase) || (race.phase === 'review' && now >= (race.reviewUntil ?? 0))) throw new Error('This roll can no longer be undone.');
+diff --git a/src/main.ts b/src/main.ts
+index ac5136c..abc63d9 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -11,13 +11,13 @@ const post=(type:string)=>window.parent.postMessage({channel:'between-turns',ver
+ async function request<T>(data:object):Promise<T>{ const response=await fetch('/embeddedApi',{method:'POST',headers:{'Content-Type':'application/json',...(credential?{Authorization:`Bearer ${credential}`}:{})},body:JSON.stringify(data),cache:'no-store',signal:AbortSignal.timeout(25000)}); const body=await response.json(); if(!response.ok || body.error) throw Object.assign(new Error(body.error?.message || 'Please try again.'),{code:body.error?.code}); return body.result as T; }
+ function setView(next:View){view=next;clockOffset=next.serverNow-Date.now();}
+ function fail(e:unknown){status.textContent=e instanceof Error?e.message:'Unable to connect.';retry.hidden=false;}
+-function render(){if(!view)return; $('.game').hidden=false; $('#challenge').textContent=view.challenge ?? (view.phase==='review'?'Winning roll!':'Race complete!'); $('#reward').textContent=view.offer?.reward.name ?? 'Preparing reward…'; $('#benefit').textContent=view.offer?.reward.qualifyingRoll ?? ''; $('#last').textContent=view.last ? `${view.last.name}: ${view.last.results.map(x=>`${x.roll} ${x.success?'✓':'miss'} (${x.challenge})`).join(' · ')}` : 'Be the first to roll.';
++function render(){if(!view)return; $('.game').hidden=false; $('#challenge').textContent=view.challenge ?? (view.phase==='review'?(view.winnerId===view.playerId?'You won!':'Winning roll!'):'Race complete!'); $('#reward').textContent=view.offer?.reward.name ?? 'Preparing reward…'; $('#benefit').textContent=view.offer?.reward.qualifyingRoll ?? ''; $('#last').textContent=view.last ? `${view.last.name}: ${view.last.results.map(x=>`${x.roll} ${x.success?'✓':'miss'} (${x.challenge})`).join(' · ')}` : 'Be the first to roll.';
+  const showingRoll=!!view.last && (view.phase==='review' || (view.memberCount>1 && view.last.playerId===view.playerId));
+  $('#entry').hidden=showingRoll || view.phase!=='playing'; $('#entered').hidden=!showingRoll;
+- if(showingRoll && view.last){$('#entered-label').textContent=view.last.playerId===view.playerId?'YOUR ROLL':`${view.last.name.toUpperCase()}’S WINNING ROLL`;$('#entered-roll').textContent=view.last.results.map(x=>x.roll).join(' · ');$('#entered-note').textContent=view.phase==='review'?'Winning roll under review.': 'Waiting for another player to enter a roll.';}
++ if(showingRoll && view.last){$('#entered-label').textContent=view.last.playerId===view.playerId?'YOUR ROLL':`${view.last.name.toUpperCase()}’S WINNING ROLL`;$('#entered-roll').textContent=view.last.results.map(x=>x.roll).join(' · ');$('#entered-note').textContent=view.phase==='review'?(view.memberCount===1?`You won ${view.offer?.reward.name ?? 'the reward'}!`:'Winning roll under review.'): 'Waiting for another player to enter a roll.';}
+  const undo=$<HTMLButtonElement>('#undo'); undo.hidden=!view.canUndo;undo.disabled=busy || !!pending || (view.phase==='review' && Date.now()+clockOffset >= (view.reviewUntil ?? 0));
+  grid.querySelectorAll<HTMLButtonElement>('button').forEach(button=>button.disabled=busy || !!pending || view!.phase!=='playing');
+- if(retry.hidden){if(view.phase==='review'){const seconds=Math.max(0,Math.ceil(((view.reviewUntil ?? 0)-(Date.now()+clockOffset))/1000));status.textContent=seconds ? `Winning roll. Reward confirmed in ${seconds} seconds.` : 'Recording the reward…';}else status.textContent=view.phase==='playing'?'The whole party advances together.':view.phase==='settling'?'Recording the reward…':'Reward recorded. Between Turns will choose the next game.';}}
++ if(retry.hidden){if(view.phase==='review'){const seconds=Math.max(0,Math.ceil(((view.reviewUntil ?? 0)-(Date.now()+clockOffset))/1000));status.textContent=seconds ? (view.memberCount===1?`You won! Reward: ${view.offer?.reward.name ?? 'Preparing reward'}. Next game in ${seconds} seconds.`:`Winning roll. Reward confirmed in ${seconds} seconds.`) : 'Recording the reward…';}else status.textContent=view.phase==='playing'?'The whole party advances together.':view.phase==='settling'?'Recording the reward…':'Reward recorded. Between Turns will choose the next game.';}}
+ for(let n=1;n<=20;n++){const button=document.createElement('button');button.type='button';button.textContent=String(n);button.setAttribute('aria-label',`Enter roll ${n}`);button.onclick=()=>{if(busy||pending)return;pending={action:'roll',rolls:[n],requestId:crypto.randomUUID()};void submit();};grid.append(button);}
+ async function refresh(){if(!connected || busy || pending || refreshing)return; refreshing=true;const version=mutationVersion;try{const next=await request<View>({action:'view'});if(busy || pending || version!==mutationVersion)return;setView(next);retry.hidden=true;if(view?.phase==='complete')post('refresh');render();}catch(e){if(!busy && !pending && version===mutationVersion)fail(e);}finally{refreshing=false;}}
+ async function submit(){if(busy||!pending)return;busy=true;mutationVersion++;render();try{setView(await request<View>(pending));pending=undefined;retry.hidden=true;post('refresh');}catch(e){if((e as {code?:string}).code==='failed-precondition'){pending=undefined;try{setView(await request<View>({action:'view'}));}catch{} fail(e);}else fail(e);}finally{busy=false;render();}}
+diff --git a/tests/race.test.ts b/tests/race.test.ts
+index 9b5092f..bfcbb27 100644
+--- a/tests/race.test.ts
++++ b/tests/race.test.ts
+@@ -7,7 +7,7 @@ test('race length is three through seven and future challenges stay hidden',()=>
+ test('a successful roll advances, and a failure leaves the challenge in place',()=>{const next=applyRolls(race(),'p','Paul',[1],'event');assert.equal(next.index,1);assert.equal(applyRolls(next,'p','Paul',[20],'next').index,1);});
+ test('multiplayer undo restores progress and expires after another player rolls',()=>{const first=applyRolls(race(),'a','A',[1],'first',2,1000);assert.equal(first.index,1);assert.equal(publicView(first,'a',2,1000).canUndo,true);const undone=undoRoll(first,'a',2,1001);assert.equal(undone.index,0);assert.equal(undone.last,null);assert.throws(()=>applyRolls(first,'a','A',[2],'same',2,1001));const next=applyRolls(first,'b','B',[2],'next',2,1001);assert.throws(()=>undoRoll(next,'a',2,1002));assert.throws(()=>undoRoll(next,'b',1,1002));});
+ test('multiplayer win is undoable for 15 seconds and settles only after the deadline',()=>{const won=applyRolls({...race(),index:2},'p','P',[3],'win',2,1000);assert.equal(won.phase,'review');assert.equal(won.reviewUntil,16000);assert.equal(finishReview(won,15999).phase,'review');assert.equal(finishReview(won,16000).phase,'settling');assert.equal(undoRoll(won,'p',2,15999).index,2);assert.throws(()=>undoRoll(won,'p',2,16000));assert.throws(()=>undoRoll(won,'other',2,1001));});
+-test('solo players cannot undo and win immediately',()=>{const r=applyRolls(race(),'p','P',[1],'event',1,1000);assert.equal(publicView(r,'p',1,1001).canUndo,false);assert.throws(()=>undoRoll(r,'p',1,1001));assert.equal(applyRolls({...race(),index:2},'p','P',[3],'win',1,1000).phase,'settling');});
++test('solo wins show the reward for 15 seconds without enabling undo',()=>{const won=applyRolls({...race(),index:2},'p','P',[3],'win',1,1000);assert.equal(won.phase,'review');assert.equal(won.reviewUntil,16000);const view=publicView(won,'p',1,1001);assert.equal(view.winnerId,'p');assert.equal(view.offer?.reward.name,'Prize');assert.equal(view.canUndo,false);assert.throws(()=>undoRoll(won,'p',1,1001));assert.equal(finishReview(won,15999).phase,'review');assert.equal(finishReview(won,16000).phase,'settling');assert.throws(()=>applyRolls(won,'p','P',[3],'late',1,2000));});
+ test('submissions contain exactly one physical d20 integer',()=>{for(const rolls of [[],[0],[21],[1.5],[1,2]])assert.throws(()=>applyRolls(race(),'p','P',rolls,'e'));});
+ 
+ test('each new challenge category has one equally likely selection slot',()=>{
+diff --git a/tests/integration.test.ts b/tests/integration.test.ts
+index ef7b508..a73923e 100644
+--- a/tests/integration.test.ts
++++ b/tests/integration.test.ts
+@@ -6,18 +6,18 @@ import { createHash } from 'node:crypto';
+ import { RaceService } from '../functions/src/service';
+ import type { CentralContext, Race } from '../functions/src/race';
+ import type { IntegrationGateway } from '../functions/src/integration-gateway';
+-initializeApp({projectId:'demo-roll-race'}); const db=getFirestore();
++initializeApp({projectId:'demo-roll-race-solo15-service'}); const db=getFirestore();
+ const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+ const ctx=(playerId:string):CentralContext=>({version:1,sessionId:'session',runId:'run',playerId,displayName:playerId,memberCount:1,expiresAt:Date.now()+3600000});
+-test('concurrent winning requests serialize and settlement retries without duplicate award',async()=>{
+- let fail=true;let awards=0;let completes=0;let savedReceipt='';
++test('solo winning requests pause for 15 seconds and settlement retries without duplicate award',async()=>{
++ let now=1000;let fail=true;let awards=0;let completes=0;let savedReceipt='';
+  const gateway:IntegrationGateway={exchange:async()=>ctx('one'),context:async c=>c,activity:async()=>({accepted:true}),draw:async()=>({id:'offer',reward:{id:'r',name:'Prize',qualifyingRoll:'Use'}}),settle:async()=>{if(!savedReceipt){awards++;savedReceipt='receipt';}if(fail){fail=false;throw Error('lost response');}return {receipt:savedReceipt};},complete:async()=>{completes++;return {ok:true};}};
+- const service=new RaceService(db,gateway);const credentials=['A'.repeat(43),'B'.repeat(43)];
++ const service=new RaceService(db,gateway,()=>now);const credentials=['A'.repeat(43),'B'.repeat(43)];
+  for(let i=0;i<2;i++)await db.doc(`connections/${hash(credentials[i])}`).set({nonce:'nonce',expiresAt:Date.now()+3600000,context:ctx(i?'two':'one'),connecting:false});
+  const ref=db.doc(`races/${hash('session/run')}`);const challenge={kind:'exact' as const,min:7,max:7,label:'Roll exactly 7'};
+  const race:Race={sessionId:'session',runId:'run',challenges:[challenge,challenge,challenge],index:2,phase:'playing',offer:{id:'offer',reward:{id:'r',name:'Prize',qualifyingRoll:'Use'}},revision:0,last:null,settlement:null};await ref.set(race);
+  const results=await Promise.allSettled(credentials.map((credential,i)=>service.command(credential,{action:'roll',rolls:[7],requestId:`request${i}`})));
+- assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const after=(await ref.get()).data() as Race;assert.ok(['one','two'].includes(after.settlement!.winnerId));assert.equal(after.last!.results.length,1);assert.equal(awards,1);
++ assert.equal(results.filter(r=>r.status==='fulfilled').length,2);const after=(await ref.get()).data() as Race;assert.ok(['one','two'].includes(after.settlement!.winnerId));assert.equal(after.last!.results.length,1);assert.equal(after.phase,'review');assert.equal(awards,0);now=15999;await service.progress(ctx('one'));assert.equal(awards,0);assert.equal(completes,0);now=16000;
+  await service.maintain();const finished=(await ref.get()).data() as Race;assert.equal(finished.phase,'complete');assert.equal(awards,1);assert.equal(completes,1);
+  await assert.rejects(()=>service.command(credentials[1],{action:'roll',rolls:[7],requestId:'late'}));
+ });
+diff --git a/tests/cross-service.test.ts b/tests/cross-service.test.ts
+index 57015b8..53cf335 100644
+--- a/tests/cross-service.test.ts
++++ b/tests/cross-service.test.ts
+@@ -13,15 +13,15 @@ import type { IntegrationGateway } from '../functions/src/integration-gateway';
+ import type { CentralContext, Race } from '../functions/src/race';
+ import type { Grant, SessionView } from '../../between-turns/shared/types';
+ const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+-const app=initializeApp({projectId:'demo-roll-race'});const db=getFirestore(app);
+-const hubRequire=createRequire(new URL('../../between-turns/functions/package.json', import.meta.url));hubRequire('firebase-admin/app').initializeApp({projectId:'demo-roll-race'});
++const app=initializeApp({projectId:'demo-roll-race-solo15-cross'});const db=getFirestore(app);
++const hubRequire=createRequire(new URL('../../between-turns/functions/package.json', import.meta.url));hubRequire('firebase-admin/app').initializeApp({projectId:'demo-roll-race-solo15-cross'});
+ test('hub grant, actual rewards settlement and central next-game selection',async()=>{
+  const apps=[{id:'roll-race',kind:'game' as const,origin:'https://race.example'},{id:'rpg-rewards',kind:'rewards' as const,origin:'https://rewards.example',embedUrl:'https://rewards.example/embed'}];
+  const hub=new HubService(new FirestoreStore(),[{id:'roll-race',name:'Race',description:'Race',ready:true,embedUrl:'https://race.example/embed'}],apps);
+  const rh={exchange:async(token:string,nonce:string)=>hub.game('rpg-rewards',{action:'exchange',token,nonce}) as any,context:async(sessionId:string,playerId:string,runId?:string,gameId?:string)=>hub.game('rpg-rewards',{action:'context',sessionId,playerId,...(runId?{runId,gameId}:{})}) as any,activity:async(sessionId:string,playerId:string,eventId:string)=>hub.game('rpg-rewards',{action:'activity',sessionId,playerId,eventId})};
+  const rewards=new IntegratedRewards(db,rh);let lose=true;let loseCompletion=true;
+  const gateway:IntegrationGateway={exchange:async(token,nonce)=>hub.game('roll-race',{action:'exchange',token,nonce}) as Promise<CentralContext>,context:async c=>hub.game('roll-race',{action:'context',sessionId:c.sessionId,playerId:c.playerId,runId:c.runId}) as Promise<CentralContext>,activity:async(c,eventId)=>hub.game('roll-race',{action:'activity',sessionId:c.sessionId,playerId:c.playerId,runId:c.runId,eventId}),draw:async c=>rewards.game('roll-race',{action:'draw',sessionId:c.sessionId,playerId:c.playerId,runId:c.runId,requestId:hash(`offer/${c.playerId}/${c.runId}`)}) as any,settle:async(c,offerId,winnerIds)=>{const result=await rewards.game('roll-race',{action:'settle',sessionId:c.sessionId,runId:c.runId,offerId,winnerIds,requestId:hash(`settle/${c.runId}`)}) as {receipt:string};if(lose){lose=false;throw Error('Lost settlement response');}return result;},complete:async(c,eventId,winnerIds,rewardsReceipt)=>{const result=await hub.game('roll-race',{action:'complete',sessionId:c.sessionId,runId:c.runId,eventId,winnerIds,rewardsReceipt});if(loseCompletion){loseCompletion=false;throw Error('Lost completion response');}return result;}};
+- const service=new RaceService(db,gateway),player=`player-${randomUUID()}`;
++ let now=Date.now();const service=new RaceService(db,gateway,()=>now),player=`player-${randomUUID()}`;
+  const created=await hub.player(player,{action:'create',name:'Player',requestId:randomUUID()}) as SessionView; const sessionId=created.session.id;
+  await hub.player(player,{action:'start',sessionId,requestId:randomUUID()});const runId=((await hub.player(player,{action:'current'})) as SessionView).session.run!.id;
+  const nonce=randomUUID(),begin=await service.begin(nonce),grant=await hub.player(player,{action:'connect',sessionId,appId:'roll-race',runId,nonce}) as Grant; let credential=begin.credential;
+@@ -30,10 +30,11 @@ test('hub grant, actual rewards settlement and central next-game selection',asyn
+  await assert.rejects(()=>service.command(credential,{action:'view'}),/Identity changed/); const nonce2=randomUUID(),begin2=await service.begin(nonce2),grant2=await hub.player(player,{action:'connect',sessionId,appId:'roll-race',runId,nonce:nonce2}) as Grant; credential=begin2.credential; await service.connect(credential,nonce2,grant2.token);
+  const ref=db.doc(`races/${hash(`${sessionId}/${runId}`)}`);const race=(await ref.get()).data() as Race;const challenge={kind:'exact' as const,min:7,max:7,label:'Roll exactly 7'};
+  await ref.update({challenges:[challenge,challenge,challenge],index:2});
+- const result=await service.command(credential,{action:'roll',rolls:[7],requestId:'winning'});assert.equal(result.phase,'settling');assert.equal(result.last?.results.length,1);
++ const result=await service.command(credential,{action:'roll',rolls:[7],requestId:'winning'});assert.equal(result.phase,'review');assert.equal(result.last?.results.length,1);
+  assert.equal(((await hub.player(player,{action:'current'})) as SessionView).session.run?.id,runId);
+- const awards=await db.collection(`centralSessions/${sessionId}/awards`).get(); assert.equal(awards.size,1); assert.equal(awards.docs[0].get('accountId'),accountId);
++ const beforeAwards=await db.collection(`centralSessions/${sessionId}/awards`).get(); assert.equal(beforeAwards.size,0);
+  const context={version:1 as const,playerId:player,displayName:'Player',sessionId,runId,expiresAt:Date.now()+100000};
++ now+=15000;await assert.rejects(()=>service.progress(context),/Lost settlement response/);const awards=await db.collection(`centralSessions/${sessionId}/awards`).get();assert.equal(awards.size,1);assert.equal(awards.docs[0].get('accountId'),accountId);
+  await assert.rejects(()=>service.progress(context),/Lost completion/);
+  await service.progress(context);
+  const current=await hub.player(player,{action:'current'}) as SessionView;assert.notEqual(current.session.run?.id,runId);assert.equal(current.session.history.at(-1)?.winnerIds[0],player);

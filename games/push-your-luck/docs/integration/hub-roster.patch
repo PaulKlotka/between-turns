@@ -1,0 +1,12 @@
+diff --git a/functions/src/service.ts b/functions/src/service.ts
+--- a/functions/src/service.ts
++++ b/functions/src/service.ts
+@@ -258 +258 @@
+-    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt, memberCount: Object.keys(s.members).length };
++    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt, memberCount: Object.keys(s.members).length, connectedCount: Object.keys(s.members).filter(id => connected(s, id, this.now())).length, members: Object.values(s.members).map(m => ({ id: m.id, name: m.name, connected: connected(s, m.id, this.now()) })) };
+diff --git a/shared/types.ts b/shared/types.ts
+--- a/shared/types.ts
++++ b/shared/types.ts
+@@ -40 +40 @@
+-export interface ConnectionContext { version: 1; playerId: string; displayName: string; photoURL?: string | null; accountId?: string | null; accountVersion?: number; sessionId: string; runId: string | null; expiresAt: number; memberCount?: number; }
++export interface ConnectionContext { version: 1; playerId: string; displayName: string; photoURL?: string | null; accountId?: string | null; accountVersion?: number; sessionId: string; runId: string | null; expiresAt: number; memberCount?: number; connectedCount?: number; members?: { id: string; name: string; connected: boolean }[]; }

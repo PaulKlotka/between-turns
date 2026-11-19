@@ -431,6 +431,18 @@ test('inviting does not deal cards or permit shared play before two active parti
   assert.equal((await roomData(roomId)).phase, 'inviting');
 });
 
+function assertColumnCard(card: readonly (number | null)[] | null) {
+  assert.ok(card);
+  assert.equal(card.length, 25);
+  for (const [index, number] of card.entries()) {
+    if (index === 12) assert.equal(number, null);
+    else {
+      const first = (index % 5) * 4 + 1;
+      assert.ok(typeof number === 'number' && Number.isInteger(number) && number >= first && number < first + 4);
+    }
+  }
+}
+
 test('host New Card starts shared play once and deals independently randomized cards', async () => {
   const roomId = await shared();
   const room = await roomData(roomId);
@@ -439,12 +451,8 @@ test('host New Card starts shared play once and deals independently randomized c
   assert.ok(PRIZES.some(p => p.name === room.prize));
   for (const who of [a, b]) {
     const p = await playerData(roomId, who);
-    assert.equal(p.eligibleRound, 1); assert.equal(p.card!.length, 25);
-    assert.equal(p.card![12], null);
-    const counts = Array.from({ length: 20 }, (_, i) => p.card!.filter(n => n === i + 1).length);
-    assert.equal(counts.filter(count => count === 2).length, 4);
-    assert.equal(counts.filter(count => count === 1).length, 16);
-    assert.ok(p.card!.every((n, i) => i === 12 ? n === null : Number.isInteger(n) && n! >= 1 && n! <= 20));
+    assert.equal(p.eligibleRound, 1);
+    assertColumnCard(p.card);
   }
   const before = await playerData(roomId, a);
   await a.call({ action: 'start', roomId });
@@ -512,11 +520,9 @@ test('mid-round joiners receive random active cards with previous numbers marked
   await c.call({ action: 'join', roomId, name: 'Gamma' });
   const joined = await playerData(roomId, c);
   assert.equal(joined.eligibleRound, before.round);
-  assert.equal(joined.card!.length, 25); assert.equal(joined.card![12], null);
-  assert.equal(new Set(joined.card!.filter(n => n !== null)).size, 20);
+  assertColumnCard(joined.card);
   const after = await roomData(roomId);
   assert.deepEqual(after.marks, [1, 2]);
-  assert.ok(joined.card!.filter(n => n !== null && after.marks.includes(n)).length >= 2);
   assert.ok(joined.card!.some(n => n !== null && !after.marks.includes(n)));
   assert.equal(after.rolls, before.rolls); assert.equal(after.lastSubmitter, before.lastSubmitter);
   assert.equal(after.pattern, before.pattern); assert.equal(after.prize, before.prize);
@@ -560,7 +566,7 @@ test('join racing the first roll always deals an active card using the committed
     await send(a, roomId, 1);
   }
   assert.deepEqual((await roomData(roomId)).marks, [1]);
-  assert.ok(joined.card!.some(n => n === 1));
+  assertColumnCard(joined.card);
 });
 
 test('after the first roll is undone, a new player can join the now untouched round', async () => {

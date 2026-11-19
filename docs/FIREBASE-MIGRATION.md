@@ -8,6 +8,29 @@ Target the existing `between-turns-paul` project and its current billing account
 2. Compare the live hub and Rewards Functions configuration and deployed frontend assets with the branch. Preserve current lobby layout, sign-in behavior, endpoint contracts, reward inventory indexes, current games, and security headers. Capture current `APPS_JSON`, `GAMES_JSON` and `GAME_CLIENTS_JSON` from live configuration without printing the complete environment. Inventory any clients still dependent on legacy callable names or URLs.
 3. Confirm availability of the five new site IDs in `.firebaserc`. If a site ID is taken, choose another globally unique ID and update the Firebase target, hub CSP, environment settings, and both registries consistently. The canonical new domains use `.web.app`.
 
+## Public Hosting baseline
+
+The November 18 public checks returned HTTP 200 for the hub and the four previously deployed embeds. Horse Race returned 404. The hub release included a Google reCAPTCHA connect source absent from the checkout, so the monorepo CSP carries it forward. Confirm the authenticated inventory and live compiled assets before deploying.
+
+## November 18 production review
+
+The destination is already billed. The hub and all four live source projects share that billing account. Each live source has one `us-central1` default database. Horse Race has a Hosting site without a live release, billing is disabled, and the Firestore, Functions, and Scheduler APIs are disabled there. The destination inventory showed one Hosting site, one database, and one scheduler job. The five proposed site names returned public HTTP 404. Confirm availability when creating them. The shared Rewards inventory index on `awards.accountId` is captured in source, and the active Rewards game API registry includes all three existing games.
+
+The four source databases recorded 198,868 document reads, 7,953 writes, and 1,208 deletes over the preceding 30 days. At Iowa Standard rates these operations would cost about $0.07/month in the named databases, before index reads, storage, Horse Race usage, compute, build, artifacts, or Hosting. Only the hub's existing database retains the project's Firestore free tier. Budget approximately $0.12 in Firestore operations per 100,000 documents copied, plus export storage. Seven added scheduler jobs can add up to $0.70 per 31 days while the old jobs are retained, including when paused. Charges depend on actual usage. [Firestore pricing](https://cloud.google.com/firestore/pricing) · [Managed migration charges](https://docs.cloud.google.com/firestore/native/docs/manage-data/export-import) · [Cloud Scheduler pricing](https://cloud.google.com/scheduler/pricing)
+
+Review these staging mutations together:
+
+| Principal in `between-turns-paul` | Firestore database scope | Private Cloud Run invoker access |
+| --- | --- | --- |
+| Existing `between-turns-runtime` | `(default)`, replacing its current unqualified datastore binding | Retain current hub service settings |
+| New `rewards-runtime` | `rpg-rewards` | `integrationapi` |
+| New `bingo-runtime` | `rpg-bingo` | `integrationapi`, `rewardsgameapi` |
+| New `roll-race-runtime` | `roll-race` | `integrationapi`, `rewardsgameapi` |
+| New `push-your-luck-runtime` | `push-your-luck` | `integrationapi`, `rewardsgameapi` |
+| New `horse-race-runtime` | `horse-race` | `integrationapi`, `rewardsgameapi` |
+
+Preserve the hub runtime's existing Firebase Auth viewer and App Check token verifier roles and its existing legacy service invokers through staging. Retain private IAM checks on both integration APIs and grant the Scheduler target principal invoker only on each corresponding scheduled service. Permit browser transport for `rewardsembeddedapi`, `bingoembeddedapi`, `bingogamecommand`, `rollraceapi`, `pushyourluckapi` and `horseraceapi` using the same Cloud Run invoker-check configuration as the existing browser endpoints. Auth and App Check apply to the Bingo callable, and the embedded APIs require the existing application credentials. Keep destination writes gated and preserve old app routing during staging. Review any additional deployer, service-agent, or migration-bucket permissions separately once identified.
+
 ## Destination staging
 
 1. Create the five named Firestore Standard databases, corresponding Hosting sites, and same-project service accounts. Match each source database location when practical and approved. Keep the hub on its existing default database. Configure rules, indexes, and any live TTL settings for each database before importing. Use `npm run deploy -- all data --dry-run` to inspect the shared data deployment.

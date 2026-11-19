@@ -11,6 +11,8 @@ const firebase = readJson('firebase.json');
 const cli = resolve(root, 'apps/hub/node_modules/firebase-tools/lib/bin/firebase.js');
 const project = 'between-turns-paul';
 const demo = 'demo-between-turns';
+const sites = readJson('.firebaserc').targets[project].hosting;
+const hostingOrigin = name => 'https://' + sites[name][0] + '.web.app';
 
 function selectedApps(id) {
   if (id === 'all') return Object.entries(apps);
@@ -111,11 +113,42 @@ function checkRuntimeEnvironment(name, app) {
     if (!env[key] || new URL(env[key]).protocol !== 'https:') throw new Error(name + ' requires the verified HTTPS value for ' + key);
   }
   if (name !== 'hub') {
-    const sites = readJson('.firebaserc').targets[project].hosting[name];
-    const expected = 'https://' + sites[0] + '.web.app';
+    const expected = hostingOrigin(name);
     if (!env[app.runtime + '_BROWSER_ORIGINS']?.split(',').map(s => s.trim()).includes(expected)) {
       throw new Error(name + ' must allow its configured Hosting origin ' + expected);
     }
+  }
+  if (name === 'hub') checkHubRegistry(env);
+  if (name === 'rpg-rewards') {
+    const clients = JSON.parse(env.GAME_CLIENTS_JSON ?? '{}');
+    for (const [id, game] of gameApps()) {
+      const settings = readSettings(game.dir + '/functions/.env.' + project);
+      if (!clients[id]?.serviceAccount || clients[id].serviceAccount !== settings[game.runtime + '_RUNTIME_SERVICE_ACCOUNT']) {
+        throw new Error('Rewards game client does not match the runtime configured for ' + id);
+      }
+    }
+  }
+}
+
+function gameApps() {
+  return selectedApps('all').filter(([, app]) => app.dir.startsWith('games/'));
+}
+
+function checkHubRegistry(env) {
+  const registry = JSON.parse(env.APPS_JSON ?? '[]');
+  const catalog = JSON.parse(env.GAMES_JSON ?? '[]');
+  const children = [['rpg-rewards', apps['rpg-rewards']], ...gameApps()];
+  for (const [id, child] of children) {
+    const kind = id === 'rpg-rewards' ? 'rewards' : 'game';
+    const origin = hostingOrigin(id);
+    const registered = registry.find(item => item.id === id);
+    const settings = readSettings(child.dir + '/functions/.env.' + project);
+    if (registered?.kind !== kind || registered.origin !== origin ||
+        !registered.serviceAccount || registered.serviceAccount !== settings[child.runtime + '_RUNTIME_SERVICE_ACCOUNT']) {
+      throw new Error('Hub app registration does not match the deployed component ' + id);
+    }
+    const entry = kind === 'rewards' ? registered : catalog.find(game => game.id === id);
+    if (!entry || new URL(entry.embedUrl).origin !== origin) throw new Error('Hub embed URL does not match ' + id);
   }
 }
 

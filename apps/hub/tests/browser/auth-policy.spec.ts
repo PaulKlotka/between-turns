@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 
 // Exercise the deployed policy in Chromium: the emulator tests otherwise run
 // behind Vite, which does not apply Firebase Hosting's production headers.
-const config = JSON.parse(readFileSync(new URL('../../firebase.json', import.meta.url), 'utf8'));
-const policy = config.hosting.headers.find((entry: { source: string }) => entry.source === '**').headers.find((header: { key: string }) => header.key === 'Content-Security-Policy').value as string;
+const config = JSON.parse(readFileSync(new URL('../../../../firebase.json', import.meta.url), 'utf8'));
+const hosting = config.hosting.find((entry: { target: string }) => entry.target === 'hub');
+const policy = hosting.headers.find((entry: { source: string }) => entry.source === '**').headers.find((header: { key: string }) => header.key === 'Content-Security-Policy').value as string;
 const origin = 'https://between-turns-paul.web.app';
 
 test('production CSP permits Google helper scripts and same-origin auth frames while blocking unrelated scripts', async ({ page }) => {

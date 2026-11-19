@@ -35,7 +35,7 @@ The last command serves the production build, normally at http://localhost:4173.
 
 ## Rules
 
-- New Card generates a randomized 5×5 board. The 24 numbered squares include all numbers from 1–20, with four distinct numbers appearing twice and none more than twice. The center is permanently free and marked.
+- New Card generates a randomized 5×5 board with column ranges B: 1–4, I: 5–8, N: 9–12, G: 13–16, and O: 17–20. Each numbered square is drawn independently, with repeats allowed. The center is permanently free and marked.
 - Tapping any numbered square toggles every occurrence of that number together.
 - Rolling the d20 displays 1–20 and marks every matching square. Repeated rolls never unmark a number.
 - Complete the selected winning pattern to win. Single Line accepts any full row, column or diagonal; Two Lines accepts any two distinct lines, including intersections. Completing the pattern immediately locks the card.

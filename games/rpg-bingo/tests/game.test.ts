@@ -12,18 +12,32 @@ function assertDistribution(card: Game['card']) {
   assert.equal(card.length, 25);
   assert.equal(card[12], null);
   assert.equal(card.filter(n => n === null).length, 1);
-  const counts = Array.from({ length: 20 }, (_, i) => card.filter(n => n === i + 1).length);
-  assert.equal(counts.filter(count => count === 2).length, 4);
-  assert.equal(counts.filter(count => count === 1).length, 16);
+  card.forEach((number, index) => {
+    if (index === 12) return;
+    const minimum = (index % 5) * 4 + 1;
+    assert.ok(number !== null && Number.isInteger(number) && number >= minimum && number <= minimum + 3);
+  });
 }
 
-test('generation includes all twenty numbers with exactly four distinct duplicates', () => {
+test('generation uses each column range and keeps the center free', () => {
   for (const random of [() => 0, () => .999999, Math.random]) {
     const game = newGame(random);
     assertDistribution(game.card);
     assert.equal(game.marked.size, 0);
     assert.equal(isMarked(game, 12), true);
     assert.equal(game.won, false);
+  }
+});
+
+test('each column samples all four values and allows unlimited repeats', () => {
+  for (let offset = 0; offset < 4; offset++) {
+    for (const random of [() => offset / 4, () => (offset + .999999) / 4]) {
+      const { card } = newGame(random);
+      for (let column = 0; column < 5; column++) {
+        const values = card.filter((_, index) => index % 5 === column && index !== 12);
+        assert.deepEqual(values, Array(column === 2 ? 4 : 5).fill(column * 4 + offset + 1));
+      }
+    }
   }
 });
 
@@ -43,7 +57,7 @@ test('seeded samples stay in range and exercise every possible number', () => {
     const game = newGame(random);
     assertDistribution(game.card);
     layouts.add(game.card.join());
-    for (let n = 1; n <= 20; n++) if (game.card.filter(value => value === n).length === 2) duplicated.add(n);
+    for (let n = 1; n <= 20; n++) if (game.card.filter(value => value === n).length > 1) duplicated.add(n);
     game.card.forEach(n => {
       if (n === null) return;
       assert.ok(Number.isInteger(n) && n >= 1 && n <= 20);

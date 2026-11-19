@@ -19,18 +19,9 @@ export function rollD20(random: () => number = Math.random): number {
 }
 
 export function generateCard(random: () => number = Math.random): (number | null)[] {
-  const shuffle = (values: number[]) => {
-    for (let i = values.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [values[i], values[j]] = [values[j], values[i]];
-    }
-    return values;
-  };
-  const numbers = Array.from({ length: 20 }, (_, i) => i + 1);
-  const duplicates = shuffle([...numbers]).slice(0, 4);
-  const card: (number | null)[] = shuffle([...numbers, ...duplicates]);
-  card.splice(12, 0, null);
-  return card;
+  return Array.from({ length: 25 }, (_, index) =>
+    index === 12 ? null : (index % 5) * 4 + Math.floor(random() * 4) + 1,
+  );
 }
 
 export function newGame(random: () => number = Math.random, prizeRandom: () => number = Math.random, patternRandom: () => number = Math.random): Game {

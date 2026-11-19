@@ -1,5 +1,7 @@
 # Rewards deployment
 
+November 1 Google-account release: updated functions and Hosting are deployed, the `awards.accountId` collection-group index is READY, and a real signed-in account's saved inventory was verified with its original award ID and no duplicate award records. Backend IAM remains private; embedded browser requests retain server-bound credential checks. See the sibling hub's `docs/RELEASE-2026-11-01-GOOGLE.md` for evidence and test limits.
+
 Build and verify locally before deploying. The integration updates were deployed to the existing three Firebase projects on November 1, 2026. Existing runtime identities were retained, scoped backend invocation was configured, and browser transport was verified.
 
 ## Configuration
@@ -36,6 +38,13 @@ Deploy the hub changes from the checked patch before using Rewards: it must vali
 
 ## Data compatibility
 
-The adapter uses the same `centralSessions`, `centralConnections`, `centralReceipts` and `centralPlayerReceipts` formats and deterministic offer/award/settlement IDs as the integrated copy inside Bingo. Historical central award records remain readable. Legacy standalone sessions are not imported. Access to records is always gated by current hub membership and expiry; database retention does not confer access.
+The adapter uses the same `centralSessions`, `centralConnections`, `centralReceipts` and `centralPlayerReceipts` formats and deterministic offer/award/settlement IDs as the integrated copy inside Bingo. Historical central award records remain readable. Legacy standalone sessions are not imported. Guest access remains gated by current hub membership and expiry. Google account inventory uses verified account ownership and can be accessed after a session ends; database retention alone never confers access.
 
 `maintainCentralRewards` retries durable activity and removes expired opaque browser connections. It also drains the earlier adapter's pending activity records. Legacy standalone cleanup remains only to remove old records. No independent Rewards session clock is used for new central inventory.
+
+## Horse Race integration prepared (November 15, 2026)
+
+Horse Race uses the existing multi-winner `draw`/`settle` API. No Rewards service implementation change is needed. Its dedicated runtime must be merged into `GAME_CLIENTS_JSON`, with private `gameApi` invocation granted only to that identity. The concrete proposed principal, resource scopes and remaining approval are documented in `../../horse-race/DEPLOYMENT.md`. No Horse Race production registration or permission has been changed. Preserve the union of the current live registries: `gameApi` already includes Push Your Luck even though some other function env snapshots are older. Local service integration testing verifies one award for each joint winner and the existing guest/account ownership fields; it does not verify live Google sign-in.
+
+November 18 architecture correction: register Horse Race only as horse-race-runtime@horse-race-paul.iam.gserviceaccount.com from its dedicated project. Its only Rewards permission is service-scoped roles/run.invoker on gameapi; it must not receive Rewards database access or any Roll Race access. The shared-project proposal is superseded. Firebase Functions requires Blaze, and no billing changes are authorized; current project state could not be rechecked because the saved Firebase login expired.
+

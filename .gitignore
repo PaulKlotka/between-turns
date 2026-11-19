@@ -155,3 +155,6 @@ functions/lib/
 test-results/
 playwright-report/
 screenshots/
+
+# Local migration evidence and comparison builds
+.ops/

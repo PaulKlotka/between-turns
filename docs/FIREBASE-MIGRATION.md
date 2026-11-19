@@ -10,7 +10,7 @@ Target the existing `between-turns-paul` project and its current billing account
 
 ## Public Hosting baseline
 
-The November 18 public checks returned HTTP 200 for the hub and the four previously deployed embeds. Horse Race returned 404. The hub release included a Google reCAPTCHA connect source absent from the checkout, so the monorepo CSP carries it forward. Confirm the authenticated inventory and live compiled assets before deploying.
+The November 18 public checks returned HTTP 200 for the hub and the four previously deployed embeds. Horse Race returned 404. The hub release included a Google reCAPTCHA connect source absent from the checkout, so the monorepo CSP carries it forward. The production hub JavaScript matched the local production build. The stylesheet used the live two-column lobby on wider screens and one column on mobile. The monorepo carries that live layout forward, and the imported history retains the local alternate layout.
 
 ## November 18 production review
 
@@ -18,7 +18,7 @@ The destination is already billed. The hub and all four live source projects sha
 
 The four source databases recorded 198,868 document reads, 7,953 writes, and 1,208 deletes over the preceding 30 days. At Iowa Standard rates these operations would cost about $0.07/month in the named databases, before index reads, storage, Horse Race usage, compute, build, artifacts, or Hosting. Only the hub's existing database retains the project's Firestore free tier. Budget approximately $0.12 in Firestore operations per 100,000 documents copied, plus export storage. Seven added scheduler jobs can add up to $0.70 per 31 days while the old jobs are retained, including when paused. Charges depend on actual usage. [Firestore pricing](https://cloud.google.com/firestore/pricing) · [Managed migration charges](https://docs.cloud.google.com/firestore/native/docs/manage-data/export-import) · [Cloud Scheduler pricing](https://cloud.google.com/scheduler/pricing)
 
-Review these staging mutations together:
+Review these staging mutations together.
 
 | Principal in `between-turns-paul` | Firestore database scope | Private Cloud Run invoker access |
 | --- | --- | --- |

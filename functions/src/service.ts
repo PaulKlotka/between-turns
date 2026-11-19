@@ -255,7 +255,7 @@ export class HubService {
     });
   }
   private context(s: Session, uid: string, kind: RegisteredApp['kind'], identity: AccountProfile | null = null): ConnectionContext {
-    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt };
+    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt, memberCount: Object.keys(s.members).length, connectedCount: Object.keys(s.members).filter(id => connected(s, id, this.now())).length, members: Object.values(s.members).map(m => ({ id: m.id, name: m.name, connected: connected(s, m.id, this.now()) })) };
   }
   async settleSession(sessionId: string) {
     return this.store.transaction(async tx => {

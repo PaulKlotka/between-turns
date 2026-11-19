@@ -1,6 +1,6 @@
 # Google authentication and permanent rewards
 
-Implemented locally November 1, 2026. Production provider configuration and deployment are separate release steps; local emulator checks do not establish live Google OAuth behavior.
+Released November 1, 2026 across Between Turns, Bingo and Rewards. Real Google sign-in, account name/photo, retained session/card and stored account rewards were verified live. See [release evidence and verification limits](RELEASE-2026-11-01-GOOGLE.md).
 
 ## Behavior
 
@@ -47,7 +47,7 @@ Rewards first writes `centralOwners/{hash(sessionId/playerId)}` as an ownership 
 6. Deploy the hub frontend. Do not advertise sign-in until Rewards, Bingo, the hub backend, Google provider and index are all ready.
 7. Verify real Google login on desktop and mobile, cancellation, an existing account signed into from a different guest/device, photos, guest award transfer, post-session inventory and sign-out. Emulator identities are synthetic and cannot validate Google's production consent screen or browser storage policy.
 
-No release step above has been executed as part of local implementation.
+Release configuration and deployment steps are complete. The Google provider, both callback domains, Auth profile-read permission and permanent-inventory index were verified. The production CSP explicitly permits Google's authentication helper script and same-origin helper iframe. Additional destructive/time-based production checks were not forced; see the release evidence above.
 
 ## Local verification
 

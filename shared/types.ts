@@ -37,7 +37,7 @@ export type PlayerCommand =
   | { action: 'connect'; sessionId: string; appId: string; runId?: string; nonce: string };
 export interface Grant { token: string; expiresAt: number; }
 export type PlayerResponse = SessionView | Grant | null;
-export interface ConnectionContext { version: 1; playerId: string; displayName: string; photoURL?: string | null; accountId?: string | null; accountVersion?: number; sessionId: string; runId: string | null; expiresAt: number; }
+export interface ConnectionContext { version: 1; playerId: string; displayName: string; photoURL?: string | null; accountId?: string | null; accountVersion?: number; sessionId: string; runId: string | null; expiresAt: number; memberCount?: number; connectedCount?: number; members?: { id: string; name: string; connected: boolean }[]; }
 export type GameCommand =
   | { action: 'rewardTransfers'; accountId?: string }
   | { action: 'ackRewardTransfer'; transferId: string }

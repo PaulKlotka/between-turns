@@ -1,5 +1,9 @@
 # Firebase deployment
 
+## November 1, 2026 release
+
+Google authentication and permanent Rewards inventory are deployed across the three projects. The active Bingo catalog and Rewards registration were preserved. All functions/schedules, Hosting responses, account-inventory index and OAuth callback were read back; real Google sign-in and an existing saved award were verified. See [release evidence](RELEASE-2026-11-01-GOOGLE.md). The October 31 status below is historical.
+
 Dedicated project: `between-turns-paul` (Between Turns). The intended default Hosting URL is https://between-turns-paul.web.app. This project is separate from RPG Bingo and RPG Rewards. Always pass the project ID explicitly; do not deploy to either existing project.
 
 ## Current deployment status — October 31, 2026

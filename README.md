@@ -1,12 +1,12 @@
 # Between Turns
 
-A phone-friendly session hub for games around the RPG table. Between Turns owns guest identity, shared sessions, voting, and navigation. Games validate gameplay; RPG Rewards will manage the session-wide reward inventory.
+A phone-friendly session hub for games around the RPG table. Between Turns owns Google/guest identity, shared sessions, voting, and navigation. Games validate gameplay; RPG Rewards manages guest session inventory and permanent account rewards.
 
-Local November 1 update: optional Google login supplies account names/photos and permanent Rewards inventory. Live guest awards transfer in place when signing in; My Rewards remains available after sessions end. The coordinated changes include the sibling Bingo and Rewards repositories. See [authentication and release instructions](docs/AUTHENTICATION.md); these changes have not been deployed.
+Released November 1: optional Google login supplies account names/photos and permanent Rewards inventory. Live guest awards transfer in place when signing in; My Rewards remains available after sessions end. The coordinated changes are deployed across the sibling Bingo and Rewards projects. See [release evidence](docs/RELEASE-2026-11-01-GOOGLE.md) and [authentication](docs/AUTHENTICATION.md).
 
-The existing `rpg-bingo` and `rpg-rewards` repositories and deployments are not modified. Both appear as integration placeholders in this release. No game is marked playable until its backend and embedded UI implement [the integration contract](docs/INTEGRATION.md).
+Bingo and Rewards are integrated through [the integration contract](docs/INTEGRATION.md). Each project is deployed independently; only integrated games are offered as playable.
 
-Live application: https://between-turns-paul.web.app. Guest identity, shared sessions, invitations, navigation, and the session backend are deployed. Bingo and Rewards remain integration placeholders. See [deployment status](docs/DEPLOYMENT.md).
+Live application: https://between-turns-paul.web.app. Google/guest identity, sessions, invitations, voting, Bingo and Rewards are deployed. See [deployment status](docs/DEPLOYMENT.md).
 
 ## Run locally
 
@@ -33,8 +33,8 @@ The final command starts isolated emulators, runs real Firestore concurrency and
 ## Player experience
 
 - Players may remain browser guests or sign in with Google for account names/photos and rewards that survive sessions and work across devices. Guests retain browser-local identity; clearing browser data creates a different guest. Accounts confer no owner privileges.
-- Create a shared session, or join by QR, link, or a 15-character code. Names are unique within a session after Unicode normalization, case folding, and whitespace cleanup. Sessions support up to 32 players.
-- One guest belongs to one session at a time. Switching membership is atomic; a failed join preserves the old membership. Any player can start the first selection. Late arrivals immediately enter the active game.
+- Create a shared session, or join by QR, link, or a 15-character code. Guest names are unique within a session after Unicode normalization, case folding, and whitespace cleanup; Google users use their account name. Sessions support up to 32 players.
+- One player belongs to one session at a time. Switching membership is atomic; a failed join preserves the old membership. Any player can start the first selection. Late arrivals immediately enter the active game.
 - Current Game, My Rewards, and Session views share one application shell. Navigation preserves an active embedded game's iframe.
 - Sessions and guest rewards expire 24 hours after the latest meaningful accepted activity by any member. Google-owned rewards do not expire with sessions. Presence, polling, reading, refreshes, authentication, handoffs, duplicate retries, and automatic transitions do not extend session expiry.
 - Leaving an empty session closes it. There is no session creator role, kick control, or administrator UI.

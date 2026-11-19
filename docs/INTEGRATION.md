@@ -1,6 +1,6 @@
 # Between Turns integration contract, version 1
 
-November 1, 2026 local extension: [Google identity and permanent reward ownership](AUTHENTICATION.md) supersedes the guest-only, account-linking and session-only inventory restrictions below. Existing session handshakes remain compatible; account-only contexts are accepted exclusively by the updated Rewards backend. This extension requires coordinated deployment.
+November 1, 2026 released extension: [Google identity and permanent reward ownership](AUTHENTICATION.md) supersedes the guest-only, account-linking and session-only inventory restrictions below. Existing session handshakes remain compatible; account-only contexts are accepted exclusively by the updated Rewards backend. Coordinated deployment is complete; see [release evidence](RELEASE-2026-11-01-GOOGLE.md).
 
 This document is the implementation handoff for later updates to RPG Bingo and RPG Rewards. Neither existing app is connected in the initial release. The local test suite is the reference adapter; production does not expose test-game or simulated-win controls.
 
@@ -115,3 +115,12 @@ For Rewards: embedded mode accepts the supplied central session and guest; hide 
 Expired sessions reject all writes even before maintenance deletes records. Presence is approximate with a 60-second lease. Votes reject late submissions at the 30-second server deadline, regardless of client clocks. Connected hub clients resolve timed-out votes on their next poll; minute maintenance is the offline fallback.
 
 Errors: `invalid-argument` 400, `unauthenticated` 401, `permission-denied` 403, `not-found` 404, `already-exists` 409, `failed-precondition` 409, `resource-exhausted` 429. IAM may reject unauthorized requests before the JSON handler. Reconnect by obtaining a fresh grant, not by inventing a new guest or accepting a browser-supplied context.
+
+## Horse Race roster support (November 15, 2026)
+
+Horse Race consumes the full `members` roster, not only players who opened its frame. The local connection context now mirrors the already-deployed `members` (`id`, `name`, `connected`), `memberCount` and `connectedCount` fields. All current session members receive four numbers; reporting a physical d20 gives a hit to every matching member, with shared winners at ten hits. The existing completion API already accepts multiple winner IDs.
+
+Horse Race's proposed fourth-game registration, exact runtime identity, private API grants and hub frame-origin change are listed in `../../horse-race/DEPLOYMENT.md`; they are pending approval. No production registration or hub Hosting change has been made. Preserve current live hub source, compiled assets, layout, Google/reCAPTCHA security directives and all three existing game entries. Do not redeploy this older checkout wholesale.
+
+November 18 architecture correction: Horse Race must use dedicated project horse-race-paul and runtime horse-race-runtime@horse-race-paul.iam.gserviceaccount.com. Its only cross-project application permissions are invoker access to this hub's integrationapi and Rewards gameapi. The shared Roll Race deployment proposal was removed. Deployment is stopped pending authenticated project/billing inspection; no billing changes are authorized.
+

@@ -11,15 +11,19 @@ export function mountEmbed(host: HTMLElement, options: { url: string; appId: str
   // Games occupy a bounded stage; reward inventories retain their normal scrolling layout.
   const fitted = !!options.runId;
   host.classList.toggle('fitted-embed', fitted);
+  const fullWidthMobile = fitted && options.appId === 'push-your-luck';
+  host.classList.toggle('mobile-full-width-game', fullWidthMobile);
   let contentSize: { width: number; height: number } | undefined;
   let lastViewport = '';
   const fit = () => {
     if (!fitted || !host.clientWidth || !host.clientHeight) return;
     if (contentSize) {
-      const scale = Math.min(1, host.clientWidth / contentSize.width, host.clientHeight / contentSize.height);
-      frame.style.width = `${contentSize.width}px`; frame.style.height = `${contentSize.height}px`;
+      const mobile = fullWidthMobile && window.matchMedia('(max-width: 700px)').matches;
+      const scale = mobile ? 1 : Math.min(1, host.clientWidth / contentSize.width, host.clientHeight / contentSize.height);
+      host.style.height = mobile ? `${contentSize.height}px` : '';
+      frame.style.width = mobile ? '100%' : `${contentSize.width}px`; frame.style.height = `${contentSize.height}px`;
       frame.style.transform = `scale(${scale})`;
-      frame.style.left = `${Math.max(0, (host.clientWidth - contentSize.width * scale) / 2)}px`;
+      frame.style.left = mobile ? '0px' : `${Math.max(0, (host.clientWidth - contentSize.width * scale) / 2)}px`;
     }
     const viewport = `${host.clientWidth}:${host.clientHeight}`;
     if (viewport !== lastViewport) {
@@ -48,5 +52,5 @@ export function mountEmbed(host: HTMLElement, options: { url: string; appId: str
     else if (event.data.type === 'error') options.report('The embedded application reported a connection problem.');
   };
   window.addEventListener('message', onMessage);
-  return () => { disposed = true; observer.disconnect(); frame.removeEventListener('load', onLoad); window.clearTimeout(timeout); window.removeEventListener('message', onMessage); frame.remove(); host.classList.remove('fitted-embed'); };
+  return () => { disposed = true; observer.disconnect(); frame.removeEventListener('load', onLoad); window.clearTimeout(timeout); window.removeEventListener('message', onMessage); frame.remove(); host.classList.remove('fitted-embed', 'mobile-full-width-game'); host.style.height = ''; };
 }

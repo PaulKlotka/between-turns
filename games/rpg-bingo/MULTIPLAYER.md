@@ -1,0 +1,143 @@
+# Shared bingo: local setup and deployment
+
+## Current scope
+
+The default page stays single-player. **Invite a player · Show QR / session link** opens an invitation; a display name creates an anonymous session. The QR encodes a direct URL to that exact session. No room code or signup is required.
+
+Inviting from an untouched, unwon solo card immediately opens shared round one with a server-generated card, shared pattern, and prize. Guests receive active cards whenever they join, with all previously rolled numbers already marked. Rolls still require two active players. The original solo card and prizes stay saved for return via Leave. If the solo card already has marks or is won, the host can finish it before explicitly choosing **New Card** to deal shared cards. Existing invite-stage rooms also start automatically when the host has an untouched solo card and a guest has joined.
+
+In shared play:
+
+1. Each active player has a separately randomized 5×5 card, free center, every number from 1–20, and four distinct numbers appearing twice.
+2. Any eligible active player can tap a numbered card square to submit a physical result, or roll the virtual die for the group. Tapping a square submits that number as a shared roll; it does not toggle marks off. Shared rolls only add marks. The free center cannot be submitted.
+3. The same player cannot submit twice consecutively, across either input method and across round boundaries. This is not a fixed order: any different active player may submit next. Waiting players cannot submit. The server enforces this rule; rejected requests do not mutate the round or prizes.
+4. A bingo locks every card for a fifteen-second review. The winning submitter can undo during that window; no prizes or fresh cards are issued yet. At the server deadline, connected clients automatically request confirmation. One transaction awards tied winners, deals fresh cards, clears marks, admits waiters, and selects the next pattern/prize. If everyone disconnects, the first member reconnecting completes overdue confirmation.
+5. A persistent latest-round banner identifies the winners, winning number and prize, so the automatic reset does not hide the result. The banner remains until another round completes.
+6. Later joiners receive a fresh random active card immediately, with every previously rolled number marked using the shared roll history. Existing cards, marks, pattern, prize and turn order stay unchanged. Joining during bingo review deals a card but preserves the pending winners and deadline; submissions remain locked until review ends. A card that already satisfies the pattern is checked for bingo on the next accepted roll. The finish-solo invitation phase still waits for the host to start shared play. Joins and rolls use server transactions to preserve a consistent shared history.
+7. Shared prizes have reversible used/unused controls and persist under the player's anonymous identity. Solo prizes remain separate and accessible below, with their original browser saving and controls. No prizes are imported from a client's untrusted solo save into the server's earned-prize ledger.
+
+Sessions expire after 24 hours without accepted activity, with hourly recursive cleanup in the cloud. Leave room returns to solo at any time and transfers the host role when needed. Shared rolls require at least two active players. There is no fixed player order or account recovery flow. A session has a technical limit of 100 participants to bound Firestore transaction writes.
+
+## Run locally without a Firebase project or billing
+
+Prerequisites: Node.js 22.12+ (the function deployment targets Node 22), npm, and Java 21+. On this computer an existing Android Studio Java 21 runtime is detected automatically by the helper; otherwise put Java on PATH. Local tests here used Node 24.21 and Java 21.0.9, so they are not a cloud Node 22 runtime test.
+
+1. Install both dependency sets:
+
+   ```sh
+   npm ci
+   npm --prefix functions ci
+   ```
+
+2. Copy `.env.example` to `.env.local` and keep `VITE_USE_FIREBASE_EMULATORS=true`. For QR use on phones, set `VITE_PUBLIC_ORIGIN` to this computer's reachable Wi-Fi address and Vite port, for example `http://192.168.1.10:5173`. The current local file uses this computer's verified preview address, `http://192.168.86.24:5173`. That address can change.
+3. In one terminal, run:
+
+   ```sh
+   npm run emulators
+   ```
+
+   This compiles the server and starts Authentication (9099), Firestore (8080), and Functions (5001) under **demo-rpg-games**, an emulator-only namespace. It does not create a Firebase project, use cloud credentials, log into Firebase, or enable billing. Emulator tooling configuration/cache stays in ignored workspace folders. The emulator UI is local-only at http://127.0.0.1:4000.
+
+4. In another terminal:
+
+   ```sh
+   npm run dev -- --port 5173 --strictPort
+   ```
+
+5. Open http://localhost:5173 on this computer. Choose **Invite a player**, enter a display name, and display the QR/link. Another browser/device joins through that link and waits. The host chooses New Card to begin shared play. Each browser's anonymous identity is separate; opening another tab on the same origin normally reuses the same player, so it is not a way to create a second player.
+
+**Phone trap:** a phone's `localhost` means the phone, not this computer. Share the LAN link, keep both devices on the same trusted Wi-Fi, and ensure the local network permits ports 5173, 9099, 8080 and 5001. Emulators listen on this computer's LAN interfaces for local tests; do not expose them to the public internet or forward these ports through a router. No firewall settings have been changed by this implementation. Actual access from a physical phone remains to be checked on that phone.
+
+The anonymous identity is saved in browser storage. Keep the same origin and session URL when reloading. Switching from `localhost` to a LAN address creates a separate browser storage origin/identity. Clearing browser data loses the anonymous identity and its access to that player's old card/prizes. There is no signup recovery. The emulator helper imports prior `.emulator-state` data when an export exists and requests export on clean shutdown; abrupt process termination can lose emulator-only server state.
+
+## Validation
+
+With the emulator processes running:
+
+```sh
+npm test
+npm run test:multiplayer
+npm run build
+```
+
+`npm test` covers the 96 solo, pattern and lifetime tests. `npm run test:multiplayer` runs 37 tests using separate authenticated Firebase client apps and actual Auth/Firestore/callable emulators. The suite verifies invite/start gating, active vs waiting players, live subscriptions, repeated numbers, physical/virtual submissions, no fixed player order (two of five players repeatedly alternating), turn enforcement, concurrent same-player and different-player requests, idempotent retries, tied wins, automatic fresh cards, waiting-player admission, prize use ownership, reconnect, invalid input and security rules.
+
+Tie and race tests use explicitly seeded synthetic cards via test-only emulator Admin SDK access. The final browser tied-win check also used seeded cards in an isolated Preview Host / Preview Guest room, after checking the originally randomized cards and regular shared rolls. Production exposes no fixture or card-edit endpoint. Tests operate only against the demo project and fail if emulators are unavailable. They do not prove deployed cross-device service. Client-rule permission-denied messages in these tests are expected checks.
+
+The browser flow was also checked using separate origins for distinct anonymous players, including the reachable LAN invite URL. Unit tests are not a substitute for that flow or for future cloud verification.
+
+## Architecture and security
+
+- Anonymous Authentication supplies stable server-verified UIDs. A caller cannot choose another player's UID in request data.
+- `rooms/{id}` contains shared round/revision/marks/prize, membership, last accepted submitter, and latest result. Each player can read their own card and own `awards` subcollection. Members can read the room and completed-round summaries, not other players' cards or prizes. Session IDs use 128 random bits.
+- Browser writes to rooms, cards, membership, awards and commands are denied by `firestore.rules`. All changes pass through the authenticated `gameCommand` callable.
+- Each roll transaction checks membership, active eligibility, last submitter, expected round and revision. It marks, detects all winners, creates deterministic per-player/per-round award documents, rotates cards and prize, records the result, and stores the request receipt in one commit.
+- Membership changes update the same room document. They therefore conflict with a simultaneous roll transaction rather than slipping through its eligibility snapshot.
+- Clients include an unpredictable request ID; retrying an accepted request returns its stored receipt without applying it again. Reusing that ID with different content is rejected. Requests with stale round/revision are rejected. Virtual results and all dealt cards/prizes are generated by the trusted server.
+- After a win, the last submitter remains unchanged even though the round resets. Rejected actions do not advance the turn. Used/unused updates are absolute owner-scoped values, so network retries do not accidentally toggle twice.
+- The UI pauses submissions while reconnecting and checks card round before displaying it. Functions remain authoritative even if a client bypasses these UI controls.
+- Production callable requests require Firebase App Check. Emulators deliberately omit App Check; this is not an instruction to disable it in cloud deployment. Maximum function instances is 3, which limits scaling but is not a spending guarantee.
+
+## Cloud configuration and update procedure
+
+Production project: `rpg-bingo-paul` (RPG Games), with explicitly approved pay-as-you-go billing. The web app is registered, anonymous sign-in is enabled, and the default Firestore database is in `us-central1`. App Check uses a domain-restricted reCAPTCHA Enterprise score key. The callable enforces App Check; direct client writes remain denied.
+
+`.firebaserc` selects this production project. The local demo emulator remains a separate project (`demo-rpg-games`). No local accounts, cards, or prizes were uploaded.
+
+To publish an update:
+
+1. Install dependencies with `npm ci` and `npm --prefix functions ci`.
+2. Configure ignored `.env.production.local` with `VITE_USE_FIREBASE_EMULATORS=false`, `VITE_FIREBASE_CONFIG` containing the public web config from `npx firebase apps:sdkconfig WEB --project rpg-bingo-paul`, and `VITE_FIREBASE_APPCHECK_SITE_KEY` containing the existing App Check site key. These are public browser settings; never include administrator credentials. Production values override the emulator-only `.env.local`.
+3. Run `npm test`, start the demo emulators and run `npm run test:multiplayer`, then run `npm run build`.
+4. Sign in with the Firebase CLI and deploy explicitly: `npx firebase deploy --only firestore:rules,functions,hosting --project rpg-bingo-paul`.
+5. Verify Hosting, two distinct anonymous players, live shared rolls/undo, rejected unauthenticated calls, deployed rules, and the enabled hourly cleanup job. A GitHub push does not deploy automatically.
+
+Function scaling is limited to three callable instances and one cleanup instance, with no minimum instances configured. These limits do not cap Firestore, Authentication, reCAPTCHA, or total billing costs. No spending limit or billing alert has been configured.
+
+Production dependency audits reported zero known vulnerabilities in both the browser and function dependency sets. The development-only Firebase CLI dependency tree still has npm audit findings (including its file-watching dependency); it is not shipped in the site's assets or function runtime. Public deployment, production App Check, and cloud billing behavior have not been verified.
+
+References: [callable functions](https://firebase.google.com/docs/functions/callable), [transactions](https://firebase.google.com/docs/firestore/manage-data/transactions), [anonymous auth](https://firebase.google.com/docs/auth/web/anonymous-auth), [local emulators](https://firebase.google.com/docs/emulator-suite/install_and_configure), [App Check with reCAPTCHA Enterprise](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider), [Functions deployment and Blaze prerequisite](https://firebase.google.com/docs/functions/get-started).
+
+
+Each shared round stores one server-selected pattern for every active player. It remains fixed until bingo, when the atomic next-round deal also selects the next pattern. The completed-round summary records the winning pattern. Rooms created before patterns were introduced keep Single Line until the next round. Required target squares are outlined on every player’s own card; Single Line and Two Lines show examples and accept any completed line(s).
+
+Leaving a room removes the caller from its roster and retains their prize records until session cleanup. The host role transfers if needed; departed players cannot submit or receive new-round cards. Every shared session stores expiresAt, extended only by accepted game actions. Expired sessions reject commands immediately, while leave remains available. Deploying the scheduled cleanupExpiredSessions function enables hourly recursive room cleanup; Firebase may require Cloud Scheduler setup during the manual deployment. Browser solo state has its own inactivity deadline and is never uploaded by this feature.
+
+Undo my last roll is offered only to the last submitter, before another accepted roll or bingo confirmation. The trusted transaction restores the exact earlier shared marks, roll count, latest result and last-submitter rule; it advances revision and refreshes inactivity expiry. An undone repeated number retains marks from earlier rolls. Undo receipts make retries idempotent, stale tokens and concurrent rolls are rejected, and winning rolls cannot revoke awards or roll back a new round.
+
+## Production access configuration
+
+The organization blocks IAM grants to `allUsers`. For the game callable only, the explicitly approved Cloud Run setting `invokerIamDisabled=true` lets browser HTTP requests reach mandatory Firebase Authentication and App Check. Cleanup retains its IAM check and allows only `bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com`, matching the scheduler identity. Verify these settings after future function updates. The runtime has `roles/datastore.user`; the build identity has the approved `roles/cloudbuild.builds.builder` role in this project. See Google's [public Cloud Run access guidance](https://docs.cloud.google.com/run/docs/authenticating/public).
+
+No image cleanup policy or billing alert is configured. The CLI may report a missing Artifact Registry cleanup policy after successful function updates; read back actual function and scheduler states. The hourly scheduler is enabled. An immediate manual cleanup test was not run.
+
+Solo Invite and its display-name form, completed QR/link and Leave control stay beneath the solo die while the host is inviting, including after refresh. The panel moves into the shared area when shared play starts.
+
+
+Bingo review and untouched-round entry: all 37 multiplayer emulator checks passed, including the real fifteen-second deadline, early-confirm/late-undo rejection, concurrent confirmation retries, winning-roll undo, immediate deals and first-roll/join races. A review holds the original pattern, prize, cards and marks. No new roll is accepted while pending. Undo restores the pre-roll state and cancels the pending win; after confirmation, prizes and the new round are final. Confirmation is automatic from connected clients; if all are offline, it completes on reconnect.
+
+Card-tap undo: the latest submitter can tap any occurrence of their latest submitted number again to undo that shared roll. This remains available during the fifteen-second bingo review; all other numbered squares and the die stay locked. Once another player submits or bingo confirms, that undo is unavailable. Card taps and the separate Undo button use the same trusted undo command and preserve older marks when undoing a repeated number. Browser checks confirmed normal card-tap undo, winning card-tap undo, and restoration of the same round without new prizes.
+
+Confirmed-win display: the previous win banner is shown only immediately after a confirmed deal, before play or undo in the next round. It is hidden during bingo review and after undo, so an old result cannot appear to confirm a canceled attempt. Won This Session displays only award rounds lower than the current active round, labels each Confirmed round, and retains legitimate prizes from earlier rounds. Pending bingo never awards a prize; canceling it removes the pending message and earns no prize. Browser validation confirmed an undone round with no result banner and only its earlier confirmed award.
+
+The most recently accepted shared number uses a darker green on every matching square. The highlight follows the restored latest result after undo and clears on a fresh round; pattern outlines remain visible.
+
+Bingo notifications now overlay the numbered card for both review and the confirmed result. The overlay does not intercept pointer events, preserving tap-again undo even when the winning square is beneath the message. At phone widths, the card is centered once when each notice appears, rather than scrolling on each countdown tick. A 390-pixel iframe viewport check confirmed the complete countdown was visible and winning-roll undo still worked through the overlay. This was responsive browser validation, not testing on a physical phone. Hosting HTML now uses Cache-Control: no-cache to revalidate the current page; hashed assets retain long-lived immutable caching. Already-open sessions still require refresh after a release.
+
+The latest submitter also has a numbered Undo roll button directly inside the bingo review overlay. This touch target remains available until the review deadline and uses the same guarded undo command. Only the button intercepts taps; the rest of the overlay remains click-through. A 390-pixel browser check canceled a pending win using this button, restoring the same round and previous marks without a new prize.
+
+Confirmed results now appear above the numbered grid in normal page flow. Only pending bingo review uses the card overlay, with its countdown and numbered Undo button. Confirming a round removes the overlay and leaves the fresh card unobstructed; automatic card centering applies only when review begins.
+
+The persistent Menu separates Game, Shared Room, Instructions, and Rewards using URL fragments without disconnecting the room or replacing cards. Game keeps the card, die, and undo; Shared Room owns invitation, QR/link, roster, and Leave; Instructions holds play and house rules; Rewards contains shared confirmed prizes and saved solo prizes. Refresh preserves the chosen page and session query. A new pending bingo opens Game for review, and leaving returns to the saved solo Game. Browser checks at 390 pixels confirmed page visibility, invitation controls, shared reward use/undo, and unchanged marks; direct Rewards refresh and solo creation/leave were also checked. All 96 existing tests and the production build pass.
+
+The Menu control now uses an accessible three-line hamburger icon without a visible text label or disclosure arrow. On phones, the shared prize title toggles its description, which starts collapsed for each new round and retains its open state across room updates. Desktop keeps a plain title with the description visible. A 390-pixel browser check verified open/close and menu navigation; a desktop check verified the description remains visible. Production build passes.
+
+On phones, solo and shared pattern names now toggle their guidelines and marking legend. Help starts collapsed for a new card or shared round, and shared updates preserve the current expanded state. Desktop keeps the guidelines visible. Phone-width browser checks verified reveal/hide in both modes, and desktop guidance remains visible; the production build passes.
+
+Round History is available from the menu on phone and desktop. It reads the existing member-only rooms/{roomId}/rounds collection in round order and lists every saved confirmed round, all tied winner names, and its reward. The current round is labeled in progress or under review until confirmed. Empty/loading/error states are explicit, and leaving clears the displayed session history. No server or Firestore-rule change was needed. Browser checks verified four recorded rounds with tied winners at 390 pixels and desktop width, including direct-page refresh.
+
+On phones, the shared die panel's Undo button and supporting instructions span both grid columns. A 390-pixel browser check confirmed the normal undo explanation fits in two lines across the panel; production build passes.
+
+Untouched-invite recovery: all 40 multiplayer emulator checks and 96 solo checks pass. Added checks cover immediate server-generated cards with the two-player roll minimum, waiting players admitted atomically when undo clears the first roll, and idempotent admission on rejoining an older untouched room. Refreshing a waiting session requests admission without replacing active cards. Two distinct browser identities verified that the host and joining guest both receive active cards without another New Card action.
+
+Expired-room return: an authenticated, App Check-protected status command reports only room availability and deadline without extending expiry or exposing player data. Reopening an expired, closed, or already-cleaned room returns directly to the saved solo Game page, removes the session query, and displays an ended-session notice. The same availability check runs on deadline, tab focus/visibility, reconnect, and a missing-room subscription. Network errors retain the room until its status can be verified. Returning to solo detaches shared listeners, clears room history, and preserves a valid solo card/prizes; solo expiry still starts a fresh session. Browser checks verified a live room remains open, automatic exit on expiry, reopening an expired room from Rewards, and reopening its deleted link from Round History.

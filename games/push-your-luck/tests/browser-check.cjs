@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path');
 const {makeRace,syncMembers,applyRoll,bank,undoRoll,undoBank,publicView}=require('../functions/lib/race.js');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
+ try {
  const errors=[],calls=[];
  const context=await browser.newContext({viewport:{width:1366,height:768}});
  const offer={id:'offer',reward:{id:'prize',name:'A little extra luck',qualifyingRoll:'Use this reward on your next check.'}};
@@ -34,21 +35,22 @@ const {makeRace,syncMembers,applyRoll,bank,undoRoll,undoBank,publicView}=require
  await frame.getByRole('button',{name:'Enter roll 12',exact:true}).click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('12 at risk');await expect(frame.locator('#bank')).toHaveText('Bank 12 treasure');await expect(frame.getByRole('button',{name:'Enter roll 13',exact:true})).toBeDisabled();
  await frame.locator('#bank').click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('12 banked');await expect(frame.locator('#bank')).toHaveText('Sitting out the next roll');await frame.locator('#undo-bank').click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('12 at risk');await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('0 banked');
  await frame.locator('#undo-roll').click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('0 at risk');await expect(frame.getByRole('button',{name:'Enter roll 12',exact:true})).toBeEnabled();
- // With only one connected member, multiplayer continues and repeat entries work.
- connectedCount=1;await frame.getByRole('button',{name:'Enter roll 19',exact:true}).click();await frame.getByRole('button',{name:'Enter roll 19',exact:true}).click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('38 at risk');
+ // With one connected member, a repeat entry still triggers a toxic roll.
+ connectedCount=1;await frame.getByRole('button',{name:'Enter roll 19',exact:true}).click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('19 at risk');
+ await frame.getByRole('button',{name:'Enter roll 19 (toxic for you)',exact:true}).click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('0 at risk');
  // Win by pressing Bank and verify pause and correction controls.
- race.players.p.atRisk=110;race.revision++;await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('110 at risk',{timeout:10000});await frame.locator('#bank').click();await expect(frame.locator('#status')).toContainText('Result confirms');await expect(frame.locator('#result')).toContainText('Paul wins');await expect(frame.getByRole('button',{name:'Enter roll 1',exact:true})).toBeDisabled();await expect(frame.locator('#undo-bank')).toBeVisible();await frame.locator('#undo-bank').click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('110 at risk');
+ race.players.p.atRisk=110;race.revision++;await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('110 at risk',{timeout:10000});await frame.locator('#bank').click();await expect(frame.locator('#status')).toContainText('Result confirms');await expect(frame.locator('#result')).toContainText('Paul wins');await expect(frame.getByRole('button',{name:/^Enter roll 1\b/})).toBeDisabled();await expect(frame.locator('#undo-bank')).toBeVisible();await frame.locator('#undo-bank').click();await expect(frame.locator('.race-row.me .race-label span:last-child')).toContainText('110 at risk');
  race={...syncMembers(makeRace('solo','run'),[{id:'p',name:'Paul',connected:true}],1),offer};connectedCount=1;race.revision=100;await expect(frame.locator('.turn-row')).toContainText('0 / 10 rolls',{timeout:10000});
- for(let i=0;i<9;i++) await frame.getByRole('button',{name:'Enter roll 2',exact:true}).click();
+ for(let n=2;n<=10;n++) await frame.getByRole('button',{name:'Enter roll '+n,exact:true}).click();
  await expect(frame.locator('.turn-row')).toContainText('9 / 10 rolls');await expect(frame.locator('.bar-turns')).toHaveCSS('width', /px/);
- await frame.getByRole('button',{name:'Enter roll 2',exact:true}).click();await expect(frame.locator('.turn-row')).toContainText('10 / 10 rolls');await expect(frame.locator('#result')).toContainText('Solo complete');await expect(frame.locator('.race-row.me')).toContainText('20 banked');
- fs.mkdirSync('artifacts',{recursive:true});await page.setViewportSize({width:1366,height:768});await child.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const fresh=await context.newPage();await fresh.goto('https://between-turns-paul.web.app');await expect(fresh.frameLocator('iframe').locator('.race-row.me .race-label span:last-child')).toContainText('20 banked');await fresh.screenshot({path:'artifacts/desktop-preview.png'});await fresh.close();
+ await frame.getByRole('button',{name:'Enter roll 11',exact:true}).click();await expect(frame.locator('.turn-row')).toContainText('10 / 10 rolls');await expect(frame.locator('#result')).toContainText('Solo complete');await expect(frame.locator('.race-row.me')).toContainText('65 banked');
+ fs.mkdirSync('artifacts',{recursive:true});await page.setViewportSize({width:1366,height:768});await child.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const fresh=await context.newPage();await fresh.goto('https://between-turns-paul.web.app');await expect(fresh.frameLocator('iframe').locator('.race-row.me .race-label span:last-child')).toContainText('65 banked');await fresh.screenshot({path:'artifacts/desktop-preview.png'});await fresh.close();
  for(const width of [320,390]){await page.setViewportSize({width,height:844});expect(await child.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await frame.locator('#bank').scrollIntoViewIfNeeded();await expect(frame.locator('#bank')).toBeVisible();await frame.getByRole('button',{name:'Enter roll 20',exact:true}).scrollIntoViewIfNeeded();await expect(frame.getByRole('button',{name:'Enter roll 20',exact:true})).toBeVisible();}
  await page.screenshot({path:'artifacts/mobile.png'});
  expect(calls.filter(c=>!['begin'].includes(c.data.action)).every(c=>c.authorization==='Bearer '+'A'.repeat(43))).toBe(true);
  expect(errors).toEqual([]);
  console.log('PASS: 3 desktop sizes without scrolling; 320/390px controls; roll/bank/undo; multiplayer turn lock; review pause; credential header.');
- await browser.close();
+ } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 

@@ -1,0 +1,28 @@
+{
+  "name": "horse-race",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit && tsc -p functions/tsconfig.json --noEmit",
+    "build": "npm run typecheck && npm --prefix functions run build && vite build",
+    "test": "tsx --test tests/race.test.ts tests/deployment.test.ts",
+    "test:integration": "tsx --test tests/integration.test.ts",
+    "test:browser": "node tests/browser-check.cjs",
+    "firebase": "node scripts/firebase.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "firebase-tools": "^15.36.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}
+
+

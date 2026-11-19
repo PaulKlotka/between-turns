@@ -38,7 +38,8 @@ test('real hub and Rewards services record two tied awards, account ownership, h
  for(const playerId of ['b','c'])await hub.player(playerId,{action:'join',name:playerId.toUpperCase(),code:created.session.code,requestId:randomUUID()});
  store.data.set('identities/a',{accountId:'verified-google-account',displayName:'A',photoURL:null,version:1});
  const started:any=await hub.player('a',{action:'start',sessionId:created.session.id,requestId:randomUUID()});const sessionId=created.session.id,runId=started.session.run.id;
- const rewards=new IntegratedRewards(getFirestore(getApp(), 'rpg-rewards'),{
+ const rewardsDb = getFirestore(getApp(), 'rpg-rewards');
+ const rewards=new IntegratedRewards(rewardsDb,{
   exchange:async(token,nonce)=>hub.game('rpg-rewards',{action:'exchange',token,nonce}) as any,
   context:async(s,p,r,g)=>hub.game('rpg-rewards',{action:'context',sessionId:s,playerId:p,...(r?{runId:r,gameId:g}: {})}) as any,
   activity:async(s,p,eventId)=>hub.game('rpg-rewards',{action:'activity',sessionId:s,playerId:p,eventId}),
@@ -56,7 +57,7 @@ test('real hub and Rewards services record two tied awards, account ownership, h
  const ref=db.doc(`horseRaces/${hash(`${sessionId}/${runId}`)}`);const seeded=(await ref.get()).data() as Race;seeded.players=seeded.players.map(p=>({...p,numbers:p.id==='c'?[10,11,12,13]:[1,2,3,4]}));await ref.set(seeded);
  for(let i=0;i<10;i++)await service.command(credential,{action:'roll',rolls:[1],requestId:randomUUID()});
  assert.equal((await ref.get()).get('phase'),'review');now+=15000;await service.maintain();assert.equal((await ref.get()).get('phase'),'complete');
- const awards=await db.collection(`centralSessions/${sessionId}/awards`).get();assert.equal(awards.size,2);assert.deepEqual(awards.docs.map((d:any)=>d.get('playerId')).sort(),['a','b']);assert.equal(awards.docs.find((d:any)=>d.get('playerId')==='a')?.get('accountId'),'verified-google-account');assert.equal(awards.docs.find((d:any)=>d.get('playerId')==='b')?.get('accountId'),null);
+ const awards=await rewardsDb.collection(`centralSessions/${sessionId}/awards`).get();assert.equal(awards.size,2);assert.deepEqual(awards.docs.map((d:any)=>d.get('playerId')).sort(),['a','b']);assert.equal(awards.docs.find((d:any)=>d.get('playerId')==='a')?.get('accountId'),'verified-google-account');assert.equal(awards.docs.find((d:any)=>d.get('playerId')==='b')?.get('accountId'),null);
  const after:any=await hub.player('c',{action:'current'});assert.deepEqual(after.session.history[0].winnerIds,['a','b']);assert.equal(after.session.history[0].gameId,'horse-race');assert.notEqual(after.session.run.id,runId);
  await assert.rejects(()=>service.command(credential,{action:'view'}),/ended/);
 });

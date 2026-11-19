@@ -21,8 +21,12 @@ function selectedApps(id) {
 }
 
 export function deploymentTargets(id, scope) {
-  if (scope === 'data' && id === 'all') return ['firestore:rules', 'firestore:indexes'];
-  if (!['all', 'functions', 'hosting'].includes(scope)) throw new Error('Use functions, hosting, all, or all data.');
+  if (scope === 'data') {
+    if (id === 'all') return ['firestore:rules', 'firestore:indexes'];
+    const [[name]] = selectedApps(id);
+    return ['firestore:' + (name === 'hub' ? '(default)' : name)];
+  }
+  if (!['all', 'functions', 'hosting'].includes(scope)) throw new Error('Use functions, hosting, data, or all.');
   return selectedApps(id).flatMap(([name, app]) => {
     const codebase = firebase.functions.find(item => item.source === app.dir + '/functions').codebase;
     return [

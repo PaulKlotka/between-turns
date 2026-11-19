@@ -87,7 +87,7 @@ test('real hub, Bingo and Rewards complete a tied game, recover settlement, star
   assert.equal(inventory.inventory.length, 1); assert.equal(inventory.history.length, 2);
   assert.deepEqual(inventory.inventory[0].reward, start.offer!.reward);
   const awardId = inventory.inventory[0].id;
-  await assert.rejects(f.rewards.player(f.br, { action: 'consume', awardId, consumed: true, requestId: 'steal' }), /another player/);
+  await assert.rejects(f.rewards.player(f.br, { action: 'consume', awardId, consumed: true, requestId: 'steal' }), { code: 'permission-denied' });
   const used = await f.rewards.player(f.ar, { action: 'consume', awardId, consumed: true, requestId: 'use' }); assert.notEqual(used.inventory[0].consumedAt, null);
   const unused = await f.rewards.player(f.ar, { action: 'consume', awardId, consumed: false, requestId: 'undo-use' }); assert.equal(unused.inventory[0].consumedAt, null);
   await assert.rejects(restarted.command(f.ac, { action: 'view' }), /active/);

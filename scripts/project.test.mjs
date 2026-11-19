@@ -15,7 +15,8 @@ test('deploy selectors isolate each component and keep database changes explicit
   assert.deepEqual(deploymentTargets('rpg-rewards', 'functions'), ['functions:rewards']);
   assert.deepEqual(deploymentTargets('all', 'data'), ['firestore:rules', 'firestore:indexes']);
   assert.throws(() => deploymentTargets('another-project', 'all'));
-  assert.throws(() => deploymentTargets('horse-race', 'data'));
+  assert.deepEqual(deploymentTargets('horse-race', 'data'), ['firestore:horse-race']);
+  assert.deepEqual(deploymentTargets('hub', 'data'), ['firestore:(default)']);
 });
 
 test('Firestore, Hosting, and Functions remain isolated by component', () => {

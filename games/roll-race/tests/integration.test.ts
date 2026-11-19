@@ -10,15 +10,16 @@ initializeApp({projectId:'demo-between-turns'}); const db=getFirestore(getApp(),
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const ctx=(playerId:string):CentralContext=>({version:1,sessionId:'session',runId:'run',playerId,displayName:playerId,memberCount:1,expiresAt:Date.now()+3600000});
 test('concurrent winning requests serialize and settlement retries without duplicate award',async()=>{
- let fail=true;let awards=0;let completes=0;let savedReceipt='';
- const gateway:IntegrationGateway={exchange:async()=>ctx('one'),context:async c=>c,activity:async()=>({accepted:true}),draw:async()=>({id:'offer',reward:{id:'r',name:'Prize',qualifyingRoll:'Use'}}),settle:async()=>{if(!savedReceipt){awards++;savedReceipt='receipt';}if(fail){fail=false;throw Error('lost response');}return {receipt:savedReceipt};},complete:async()=>{completes++;return {ok:true};}};
+ let fail=true;let awards=0;let savedReceipt='';
+ const completedEvents = new Set<string>();
+ const gateway:IntegrationGateway={exchange:async()=>ctx('one'),context:async c=>c,activity:async()=>({accepted:true}),draw:async()=>({id:'offer',reward:{id:'r',name:'Prize',qualifyingRoll:'Use'}}),settle:async()=>{if(!savedReceipt){awards++;savedReceipt='receipt';}if(fail){fail=false;throw Error('lost response');}return {receipt:savedReceipt};},complete:async(_context,eventId)=>{completedEvents.add(eventId);return {ok:true};}};
  const service=new RaceService(db,gateway);const credentials=['A'.repeat(43),'B'.repeat(43)];
  for(let i=0;i<2;i++)await db.doc(`connections/${hash(credentials[i])}`).set({nonce:'nonce',expiresAt:Date.now()+3600000,context:ctx(i?'two':'one'),connecting:false});
  const ref=db.doc(`races/${hash('session/run')}`);const challenge={kind:'exact' as const,min:7,max:7,label:'Roll exactly 7'};
  const race:Race={sessionId:'session',runId:'run',challenges:[challenge,challenge,challenge],index:2,phase:'playing',offer:{id:'offer',reward:{id:'r',name:'Prize',qualifyingRoll:'Use'}},revision:0,last:null,settlement:null};await ref.set(race);
  const results=await Promise.allSettled(credentials.map((credential,i)=>service.command(credential,{action:'roll',rolls:[7],requestId:`request${i}`})));
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const after=(await ref.get()).data() as Race;assert.ok(['one','two'].includes(after.settlement!.winnerId));assert.equal(after.last!.results.length,1);assert.equal(awards,1);
- await service.maintain();const finished=(await ref.get()).data() as Race;assert.equal(finished.phase,'complete');assert.equal(awards,1);assert.equal(completes,1);
+ await service.maintain();const finished=(await ref.get()).data() as Race;assert.equal(finished.phase,'complete');assert.equal(awards,1);assert.equal(completedEvents.size,1);
  await assert.rejects(()=>service.command(credentials[1],{action:'roll',rolls:[7],requestId:'late'}));
 });
 test('submission receipts deduplicate retries and reject changed payloads',async()=>{

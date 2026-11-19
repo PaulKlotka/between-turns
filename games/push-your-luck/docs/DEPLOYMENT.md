@@ -1,5 +1,7 @@
 # Deployment
 
+> Historical standalone deployment record. Use the [monorepo migration runbook](../../../docs/FIREBASE-MIGRATION.md) for production changes.
+
 Status: Deployed and enabled in Between Turns. FreeH2O is on Spark, Roll Race remains billed and Push Your Luck is billed. Browser transport approval was granted and applied; gameplay remains protected by the central grant exchange. All functions are ACTIVE and the minute job is ENABLED. See [release evidence](RELEASE.md).
 
 ## Authenticate

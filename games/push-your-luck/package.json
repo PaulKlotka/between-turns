@@ -12,10 +12,7 @@
     "build": "npm run typecheck && npm --prefix functions run build && vite build",
     "test": "tsx --test tests/race.test.ts",
     "test:integration": "tsx --test tests/integration.test.ts tests/cross-service.test.ts",
-    "test:browser": "node tests/browser-check.cjs",
-    "prepare:integrations": "node scripts/prepare-integrations.cjs",
-    "firebase": "node scripts/firebase.cjs",
-    "verify:emulators": "node scripts/verify-emulators.cjs"
+    "test:browser": "node tests/browser-check.cjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

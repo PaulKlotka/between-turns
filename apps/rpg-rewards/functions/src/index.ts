@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase-admin/app';
+import { getApp, initializeApp } from 'firebase-admin/app';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { defineString } from 'firebase-functions/params';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -11,24 +11,26 @@ import { IntegratedRewards } from './integrated-service';
 import { RemoteHub } from './hub';
 
 initializeApp();
+const writesEnabled = () => process.env.FUNCTIONS_EMULATOR === 'true' || process.env.CUTOVER_WRITES_ENABLED === 'true';
 const emulator = process.env.FUNCTIONS_EMULATOR === 'true';
 setGlobalOptions({ serviceAccount: emulator ? undefined : defineString('REWARDS_RUNTIME_SERVICE_ACCOUNT') });
 const clients = gameClients(emulator);
-const service = new RewardsService(getFirestore(), clients);
+const service = new RewardsService(getFirestore(getApp(), 'rpg-rewards'), clients);
 const verifier = new OAuth2Client();
-const integrated = new IntegratedRewards(getFirestore(), new RemoteHub());
+const integrated = new IntegratedRewards(getFirestore(getApp(), 'rpg-rewards'), new RemoteHub());
 
 // Deployment configures public HTTP invocation separately for domain-restricted organizations.
 // Firebase Authentication and App Check remain enforced by this callable.
-export const playerCommand = onCall({ region: 'us-central1', invoker: 'private', enforceAppCheck: !emulator, maxInstances: 5 }, request => {
+export const rewardsPlayerCommand = onCall({ region: 'us-central1', invoker: 'private', enforceAppCheck: !emulator, maxInstances: 5 }, request => {
   if (!request.auth) return fail('unauthenticated', 'Open Rewards through Between Turns.');
   return fail('failed-precondition', 'Open Rewards through Between Turns. Standalone sessions are no longer supported.');
 });
 
-export const embeddedApi = onRequest({ region: 'us-central1', invoker: 'private', cors: false, maxInstances: 5, timeoutSeconds: 60 }, async (request, response) => {
+export const rewardsEmbeddedApi = onRequest({ region: 'us-central1', invoker: 'private', cors: false, maxInstances: 5, timeoutSeconds: 60 }, async (request, response) => {
   response.set('Cache-Control', 'no-store');
+  if (!writesEnabled()) { response.status(503).json({ error: { code: 'unavailable', message: 'The app is undergoing maintenance.' } }); return; }
   if (request.method !== 'POST') { response.status(405).json({ error: { code: 'invalid-argument', message: 'Use POST.' } }); return; }
-  const origins = emulator ? ['http://127.0.0.1:5173'] : (process.env.REWARDS_BROWSER_ORIGINS || 'https://rpg-rewards-paul.web.app').split(',').map(s => s.trim());
+  const origins = emulator ? ['http://127.0.0.1:5173'] : (process.env.REWARDS_BROWSER_ORIGINS || '').split(',').map(s => s.trim());
   if (request.get('Origin') && !origins.includes(request.get('Origin')!)) { response.status(403).json({ error: { code: 'permission-denied', message: 'Invalid browser origin.' } }); return; }
   try {
     const data = request.body;
@@ -48,8 +50,9 @@ export const embeddedApi = onRequest({ region: 'us-central1', invoker: 'private'
   }
 });
 
-export const gameApi = onRequest({ region: 'us-central1', cors: false, invoker: 'private', maxInstances: 5, timeoutSeconds: 30 }, async (request, response) => {
+export const rewardsGameApi = onRequest({ region: 'us-central1', cors: false, invoker: 'private', maxInstances: 5, timeoutSeconds: 30 }, async (request, response) => {
   response.set('Cache-Control', 'no-store');
+  if (!writesEnabled()) { response.status(503).json({ error: { code: 'unavailable', message: 'The app is undergoing maintenance.' } }); return; }
   if (request.method !== 'POST') { response.status(405).json({ error: 'POST required.' }); return; }
   try {
     let gameId: string | undefined;
@@ -80,5 +83,5 @@ export const gameApi = onRequest({ region: 'us-central1', cors: false, invoker: 
   }
 });
 
-export const cleanupExpiredSessions = onSchedule({ schedule: 'every 60 minutes', region: 'us-central1', maxInstances: 1 }, async () => { await service.cleanup(); });
-export const maintainCentralRewards = onSchedule({ schedule: 'every 1 minutes', region: 'us-central1', maxInstances: 1 }, async () => { await integrated.maintain(); });
+export const cleanupRewardsSessions = onSchedule({ schedule: 'every 60 minutes', region: 'us-central1', maxInstances: 1 }, async () => { if (writesEnabled()) await service.cleanup(); });
+export const maintainCentralRewards = onSchedule({ schedule: 'every 1 minutes', region: 'us-central1', maxInstances: 1 }, async () => { if (writesEnabled()) await integrated.maintain(); });

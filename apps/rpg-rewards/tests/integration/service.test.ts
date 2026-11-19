@@ -7,9 +7,9 @@ import { RewardsService } from '../../functions/src/service';
 import { IDLE_MS, UNDO_USE_MS, type Award, type Offer, type SessionView } from '../../shared/model';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Run with npm run verify:emulators or set FIRESTORE_EMULATOR_HOST to the local emulator.');
-const projectId = 'demo-rpg-rewards';
+const projectId = 'demo-between-turns';
 const app = initializeApp({ projectId }, `tests-${randomUUID()}`);
-const db = getFirestore(app);
+const db = getFirestore(app, 'rpg-rewards');
 const clients = {
   'demo-game': { serviceAccount: 'demo-game@demo-rpg-rewards.iam.gserviceaccount.com', redirectUris: ['http://127.0.0.1:5174/callback'] },
   'other-game': { serviceAccount: 'other-game@demo-rpg-rewards.iam.gserviceaccount.com', redirectUris: ['http://127.0.0.1:5175/callback'] },

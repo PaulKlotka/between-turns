@@ -1,5 +1,7 @@
 # Dedicated Horse Race deployment
 
+> Historical standalone deployment record. Use the [monorepo migration runbook](../../docs/FIREBASE-MIGRATION.md) for production changes.
+
 Updated November 18, 2026. This supersedes the rejected shared-project proposal. Never deploy Horse Race into Roll Race infrastructure or grant its runtime access to Roll Race data.
 
 ## Confirmed status and billing boundary

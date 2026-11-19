@@ -1,0 +1,52 @@
+{
+  "projects": {
+    "default": "demo-between-turns",
+    "production": "between-turns-paul"
+  },
+  "targets": {
+    "between-turns-paul": {
+      "hosting": {
+        "hub": [
+          "between-turns-paul"
+        ],
+        "rpg-rewards": [
+          "between-turns-rpg-rewards"
+        ],
+        "rpg-bingo": [
+          "between-turns-rpg-bingo"
+        ],
+        "roll-race": [
+          "between-turns-roll-race"
+        ],
+        "push-your-luck": [
+          "between-turns-push-your-luck"
+        ],
+        "horse-race": [
+          "between-turns-horse-race"
+        ]
+      }
+    },
+    "demo-between-turns": {
+      "hosting": {
+        "hub": [
+          "between-turns-paul"
+        ],
+        "rpg-rewards": [
+          "between-turns-rpg-rewards"
+        ],
+        "rpg-bingo": [
+          "between-turns-rpg-bingo"
+        ],
+        "roll-race": [
+          "between-turns-roll-race"
+        ],
+        "push-your-luck": [
+          "between-turns-push-your-luck"
+        ],
+        "horse-race": [
+          "between-turns-horse-race"
+        ]
+      }
+    }
+  }
+}

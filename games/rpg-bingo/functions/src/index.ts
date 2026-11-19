@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase-admin/app';
+import { getApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { command } from './service';
@@ -8,16 +8,19 @@ import { EmbeddedService } from './embedded-service';
 import { RemoteGateway } from './integration-gateway';
 
 initializeApp();
-const embedded = () => new EmbeddedService(getFirestore(), new RemoteGateway());
+const writesEnabled = () => process.env.FUNCTIONS_EMULATOR === 'true' || process.env.CUTOVER_WRITES_ENABLED === 'true';
+const runtime = process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : process.env.BINGO_RUNTIME_SERVICE_ACCOUNT;
+const embedded = () => new EmbeddedService(getFirestore(getApp(), 'rpg-bingo'), new RemoteGateway());
 // Public transport; authority comes only from the opaque connection credential
 // bound server-side to a redeemed hub grant. It is not a Bingo Firebase login.
-export const embeddedApi = onRequest({ region: 'us-central1', invoker: 'private', maxInstances: 3, timeoutSeconds: 60, cors: false,
-  serviceAccount: process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : 'bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com',
+export const bingoEmbeddedApi = onRequest({ region: 'us-central1', invoker: 'private', maxInstances: 3, timeoutSeconds: 60, cors: false,
+  serviceAccount: runtime,
 }, async (req, res) => {
   res.set('Cache-Control', 'no-store');
+  if (!writesEnabled()) { res.status(503).json({ error: { code: 'unavailable', message: 'The app is undergoing maintenance.' } }); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: { code: 'invalid-argument', message: 'Use POST.' } }); return; }
   // Same-origin browser endpoint; the iframe, not the parent, sends these calls.
-  const allowed = (process.env.BINGO_BROWSER_ORIGINS || 'https://rpg-bingo-paul.web.app').split(',').map(value => value.trim());
+  const allowed = (process.env.BINGO_BROWSER_ORIGINS || '').split(',').map(value => value.trim());
   if (req.get('Origin') && !allowed.includes(req.get('Origin')!)) { res.status(403).json({ error: { code: 'permission-denied', message: 'Invalid browser origin.' } }); return; }
   try {
     const data = req.body;
@@ -40,14 +43,17 @@ export const embeddedApi = onRequest({ region: 'us-central1', invoker: 'private'
 });
 
 export const maintainEmbeddedGames = onSchedule({ schedule: 'every 1 minutes', maxInstances: 1, timeoutSeconds: 300,
-  serviceAccount: process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : 'bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com',
-}, async () => { await embedded().maintain(); });
-export const gameCommand = onCall({
-  region: 'us-central1', maxInstances: 3, timeoutSeconds: 30,
-  serviceAccount: process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : 'bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com',
+  serviceAccount: runtime,
+}, async () => { if (writesEnabled()) await embedded().maintain(); });
+export const bingoGameCommand = onCall({
+  region: 'us-central1', invoker: 'private', maxInstances: 3, timeoutSeconds: 30,
+  serviceAccount: runtime,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
-}, request => command(getFirestore(), request.auth?.uid, request.data));
+}, request => {
+  if (!writesEnabled()) throw new HttpsError('unavailable', 'Bingo is undergoing maintenance.');
+  return command(getFirestore(getApp(), 'rpg-bingo'), request.auth?.uid, request.data);
+});
 
-export const cleanupExpiredSessions = onSchedule({ schedule: 'every 60 minutes', timeZone: 'America/Chicago', maxInstances: 1, serviceAccount: process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : 'bingo-runtime@rpg-bingo-paul.iam.gserviceaccount.com' }, async () => {
-  await cleanupExpiredRooms(getFirestore());
+export const cleanupBingoSessions = onSchedule({ schedule: 'every 60 minutes', timeZone: 'America/Chicago', maxInstances: 1, serviceAccount: runtime }, async () => {
+  if (writesEnabled()) await cleanupExpiredRooms(getFirestore(getApp(), 'rpg-bingo'));
 });

@@ -1,0 +1,64 @@
+{
+  "hub": {
+    "dir": "apps/hub",
+    "runtime": "HUB",
+    "integration": [
+      "test:integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  },
+  "rpg-rewards": {
+    "dir": "apps/rpg-rewards",
+    "runtime": "REWARDS",
+    "integration": [
+      "test:integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  },
+  "rpg-bingo": {
+    "dir": "games/rpg-bingo",
+    "runtime": "BINGO",
+    "integration": [
+      "test:multiplayer",
+      "test:embedded",
+      "test:full-integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  },
+  "roll-race": {
+    "dir": "games/roll-race",
+    "runtime": "ROLL_RACE",
+    "integration": [
+      "test:integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  },
+  "push-your-luck": {
+    "dir": "games/push-your-luck",
+    "runtime": "PUSH_YOUR_LUCK",
+    "integration": [
+      "test:integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  },
+  "horse-race": {
+    "dir": "games/horse-race",
+    "runtime": "HORSE_RACE",
+    "integration": [
+      "test:integration"
+    ],
+    "browser": [
+      "test:browser"
+    ]
+  }
+}

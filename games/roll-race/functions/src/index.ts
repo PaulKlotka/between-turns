@@ -1,14 +1,16 @@
-import { initializeApp } from 'firebase-admin/app';
+import { getApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { RaceService } from './service';
 import { RemoteGateway } from './integration-gateway';
 initializeApp();
-const service=()=>new RaceService(getFirestore(),new RemoteGateway());
+const writesEnabled = () => process.env.FUNCTIONS_EMULATOR === 'true' || process.env.CUTOVER_WRITES_ENABLED === 'true';
+const service=()=>new RaceService(getFirestore(getApp(), 'roll-race'),new RemoteGateway());
 const runtime=process.env.FUNCTIONS_EMULATOR==='true' ? undefined : process.env.ROLL_RACE_RUNTIME_SERVICE_ACCOUNT;
-export const embeddedApi=onRequest({region:'us-central1',invoker:'private',maxInstances:3,timeoutSeconds:60,cors:false,serviceAccount:runtime},async(req,res)=>{
- res.set('Cache-Control','no-store'); if(req.method!=='POST'){res.status(405).end();return;}
+export const rollRaceApi =onRequest({region:'us-central1',invoker:'private',maxInstances:3,timeoutSeconds:60,cors:false,serviceAccount:runtime},async(req,res)=>{
+ res.set('Cache-Control','no-store');
+ if (!writesEnabled()) { res.status(503).json({ error: { code: 'unavailable', message: 'The app is undergoing maintenance.' } }); return; } if(req.method!=='POST'){res.status(405).end();return;}
  const allowed=(process.env.ROLL_RACE_BROWSER_ORIGINS || '').split(',').map(x=>x.trim());
  if(req.get('Origin') && !allowed.includes(req.get('Origin')!)){res.status(403).end();return;}
  try { const data=req.body; if(!data || typeof data!=='object' || Array.isArray(data) || JSON.stringify(data).length>8192) throw new HttpsError('invalid-argument','Invalid request.');
@@ -16,4 +18,4 @@ export const embeddedApi=onRequest({region:'us-central1',invoker:'private',maxIn
   res.json({result});
  } catch(e) {const known=e instanceof HttpsError; if(!known){const error=e as {name?:string;message?:string;code?:string|number;response?:{status?:number;data?:{error?:{code?:string}}}};console.error('Embedded request failed',JSON.stringify({name:error?.name,code:error?.code,status:error?.response?.status,remoteCode:error?.response?.data?.error?.code,message:error?.message}));} res.status(known ? (e.code==='unauthenticated'?401:409):503).json({error:{code:known?e.code:'unavailable',message:known?e.message:'Unable to reach the game services. Please retry.'}});}
 });
-export const maintainRaces=onSchedule({schedule:'every 1 minutes',maxInstances:1,timeoutSeconds:300,serviceAccount:runtime},async()=>{await service().maintain();});
+export const maintainRollRaces =onSchedule({schedule:'every 1 minutes',maxInstances:1,timeoutSeconds:300,serviceAccount:runtime},async () => { if (writesEnabled()) await service().maintain();});

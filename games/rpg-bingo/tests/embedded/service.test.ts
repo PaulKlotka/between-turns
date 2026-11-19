@@ -8,8 +8,8 @@ import type { CentralContext, EmbeddedRun } from '../../functions/src/shared/emb
 
 if (!process.env.FIRESTORE_EMULATOR_HOST?.match(/^(127\.0\.0\.1|localhost):\d+$/)) throw new Error('Run only against a local Firestore emulator.');
 const serverRequire = createRequire(new URL('../../functions/package.json', import.meta.url));
-const adminApp = serverRequire('firebase-admin/app').initializeApp({ projectId: 'demo-rpg-games' }, `embedded-${randomUUID()}`);
-const db = serverRequire('firebase-admin/firestore').getFirestore(adminApp);
+const adminApp = serverRequire('firebase-admin/app').initializeApp({ projectId: 'demo-between-turns' }, `embedded-${randomUUID()}`);
+const db = serverRequire('firebase-admin/firestore').getFirestore(adminApp, 'rpg-bingo');
 after(() => serverRequire('firebase-admin/app').deleteApp(adminApp));
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 

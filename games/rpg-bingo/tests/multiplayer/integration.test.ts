@@ -13,26 +13,26 @@ import { cleanupExpiredRooms } from '../../functions/src/cleanup';
 import { SESSION_IDLE_MS } from '../../functions/src/shared/lifetime';
 
 // Guard fixtures: admin access must never point at a real project.
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-process.env.GCLOUD_PROJECT = 'demo-rpg-games';
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8280';
+process.env.GCLOUD_PROJECT = 'demo-between-turns';
 const serverRequire = createRequire(new URL('../../functions/package.json', import.meta.url));
-const adminApp = serverRequire('firebase-admin/app').initializeApp({ projectId: 'demo-rpg-games' }, 'integration-fixtures');
-const admin = serverRequire('firebase-admin/firestore').getFirestore(adminApp);
+const adminApp = serverRequire('firebase-admin/app').initializeApp({ projectId: 'demo-between-turns' }, 'integration-fixtures');
+const admin = serverRequire('firebase-admin/firestore').getFirestore(adminApp, 'rpg-bingo');
 const id = () => randomBytes(16).toString('hex');
 const apps: FirebaseApp[] = [];
 const dbs: Firestore[] = [];
 async function client(name: string, signIn = true) {
-  const app = initializeApp({ projectId: 'demo-rpg-games', apiKey: 'demo-key', appId: 'demo-app' }, `${name}-${id()}`);
+  const app = initializeApp({ projectId: 'demo-between-turns', apiKey: 'demo-key', appId: 'demo-app' }, `${name}-${id()}`);
   apps.push(app);
   const auth = getAuth(app);
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectAuthEmulator(auth, 'http://127.0.0.1:9299', { disableWarnings: true });
   if (signIn) await signInAnonymously(auth);
-  const db = getFirestore(app);
+  const db = getFirestore(app, 'rpg-bingo');
   dbs.push(db);
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectFirestoreEmulator(db, '127.0.0.1', 8280);
   const functions = getFunctions(app, 'us-central1');
-  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-  const callable = httpsCallable<Record<string, unknown>, any>(functions, 'gameCommand');
+  connectFunctionsEmulator(functions, '127.0.0.1', 5201);
+  const callable = httpsCallable<Record<string, unknown>, any>(functions, 'bingoGameCommand');
   return { app, auth, db, uid: auth.currentUser?.uid ?? '', call: async (data: Record<string, unknown>) => (await callable(data)).data };
 }
 type Client = Awaited<ReturnType<typeof client>>;
@@ -79,7 +79,7 @@ async function seedCards(roomId: string, card = fixtureCard()) {
 }
 
 before(async () => {
-  await fetch('http://127.0.0.1:9099/').catch(() => { throw new Error('Start npm run emulators before running multiplayer integration tests.'); });
+  await fetch('http://127.0.0.1:9299/').catch(() => { throw new Error('Start npm run emulators before running multiplayer integration tests.'); });
   a = await client('alpha'); b = await client('beta'); c = await client('gamma');
   outsider = await client('outsider'); anonymous = await client('unauthenticated', false);
 });

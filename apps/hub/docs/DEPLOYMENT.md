@@ -1,5 +1,7 @@
 # Firebase deployment
 
+> Historical standalone deployment record. Use the [monorepo migration runbook](../../../docs/FIREBASE-MIGRATION.md) for production changes.
+
 ## November 1, 2026 release
 
 Google authentication and permanent Rewards inventory are deployed across the three projects. The active Bingo catalog and Rewards registration were preserved. All functions/schedules, Hosting responses, account-inventory index and OAuth callback were read back; real Google sign-in and an existing saved award were verified. See [release evidence](RELEASE-2026-11-01-GOOGLE.md). The October 31 status below is historical.

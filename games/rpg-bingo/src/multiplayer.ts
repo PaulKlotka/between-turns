@@ -26,7 +26,7 @@ export async function mountMultiplayer(root: HTMLElement, solo: HTMLElement, die
   const emulated = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
   let config: FirebaseOptions;
   try {
-    config = emulated ? { projectId: 'demo-rpg-games', apiKey: 'demo-key', appId: 'demo-app', authDomain: 'demo-rpg-games.firebaseapp.com' } : JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG || '{}');
+    config = emulated ? { projectId: 'demo-between-turns', apiKey: 'demo-key', appId: 'demo-app', authDomain: 'demo-between-turns.firebaseapp.com' } : JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG || '{}');
   } catch { config = {}; }
   if (!config.projectId || (!emulated && !import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY)) {
     root.className = 'how-panel';
@@ -39,13 +39,13 @@ export async function mountMultiplayer(root: HTMLElement, solo: HTMLElement, die
   const app = existingApp ?? initializeApp(config, 'multiplayer');
   if (!emulated && !existingApp) initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY), isTokenAutoRefreshEnabled: true });
   const auth = getAuth(app);
-  const db = getFirestore(app);
+  const db = getFirestore(app, 'rpg-bingo');
   const functions = getFunctions(app, 'us-central1');
   if (emulated && !existingApp) {
     const host = location.hostname;
-    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
-    connectFirestoreEmulator(db, host, 8080);
-    connectFunctionsEmulator(functions, host, 5001);
+    connectAuthEmulator(auth, `http://${host}:9299`, { disableWarnings: true });
+    connectFirestoreEmulator(db, host, 8280);
+    connectFunctionsEmulator(functions, host, 5201);
   }
   try {
     await setPersistence(auth, browserLocalPersistence);
@@ -59,7 +59,7 @@ export async function mountMultiplayer(root: HTMLElement, solo: HTMLElement, die
   }
   if (!isOpen()) return { onNextCard: async () => false };
   const uid = auth.currentUser!.uid;
-  const call = httpsCallable<Record<string, unknown>, unknown>(functions, 'gameCommand');
+  const call = httpsCallable<Record<string, unknown>, unknown>(functions, 'bingoGameCommand');
   let roomId = new URLSearchParams(location.search).get('session') ?? '';
   let room: Room | undefined;
   let player: Player | undefined;

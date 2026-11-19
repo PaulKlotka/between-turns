@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeApp } from 'firebase-admin/app';
+import { getApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 import { RaceService } from '../functions/src/service';
 import type { CentralContext, Race } from '../functions/src/race';
 import type { IntegrationGateway } from '../functions/src/integration-gateway';
-initializeApp({projectId:'demo-roll-race'}); const db=getFirestore();
+initializeApp({projectId:'demo-between-turns'}); const db=getFirestore(getApp(), 'roll-race');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const ctx=(playerId:string):CentralContext=>({version:1,sessionId:'session',runId:'run',playerId,displayName:playerId,memberCount:1,expiresAt:Date.now()+3600000});
 test('concurrent winning requests serialize and settlement retries without duplicate award',async()=>{

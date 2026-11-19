@@ -12,6 +12,7 @@ import { FirestoreStore } from './store';
 import { Identities } from './identity';
 
 initializeApp();
+const writesEnabled = () => process.env.FUNCTIONS_EMULATOR === 'true' || process.env.CUTOVER_WRITES_ENABLED === 'true';
 const region = 'us-central1';
 const runtime = process.env.HUB_RUNTIME_SERVICE_ACCOUNT;
 const emulator = process.env.FUNCTIONS_EMULATOR === 'true';
@@ -31,6 +32,7 @@ function config(): { apps: App[]; games: Game[]; service: HubService } {
   return { apps, games, service: new HubService(new FirestoreStore(), games, apps) };
 }
 export const playerCommand = onCall({ region, invoker: 'private', ...(runtime ? { serviceAccount: runtime } : {}), enforceAppCheck: !emulator, maxInstances: 10, timeoutSeconds: 30 }, async req => {
+  if (!writesEnabled()) throw new HttpsError('unavailable', 'Between Turns is undergoing maintenance.');
   if (!req.auth) throw new HttpsError('unauthenticated', 'Connect your guest identity first.');
   try {
     assert(JSON.stringify(req.data).length <= 8192, 'invalid-argument', 'Request is too large.');
@@ -65,6 +67,7 @@ export const playerCommand = onCall({ region, invoker: 'private', ...(runtime ? 
 const verifier = new OAuth2Client();
 export const integrationApi = onRequest({ region, ...(runtime ? { serviceAccount: runtime } : {}), invoker: 'private', maxInstances: 10, timeoutSeconds: 30, cors: false }, async (req, res) => {
   res.set('Cache-Control', 'no-store');
+  if (!writesEnabled()) { res.status(503).json({ error: { code: 'unavailable', message: 'The app is undergoing maintenance.' } }); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: { code: 'invalid-argument', message: 'Use POST.' } }); return; }
   try {
     const { apps, service } = config();
@@ -125,4 +128,4 @@ export async function maintain() {
     const batch = db.batch(); old.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit();
   }
 }
-export const sessionMaintenance = onSchedule({ region, ...(runtime ? { serviceAccount: runtime } : {}), schedule: 'every 1 minutes', maxInstances: 1, timeoutSeconds: 120 }, maintain);
+export const sessionMaintenance = onSchedule({ region, ...(runtime ? { serviceAccount: runtime } : {}), schedule: 'every 1 minutes', maxInstances: 1, timeoutSeconds: 120 }, async () => { if (writesEnabled()) await maintain(); });

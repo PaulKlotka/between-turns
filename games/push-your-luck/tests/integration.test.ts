@@ -7,7 +7,7 @@ import {makeRace,syncMembers,type CentralContext,type Race} from '../functions/s
 import type {IntegrationGateway} from '../functions/src/integration-gateway';
 const require=createRequire(new URL('../functions/package.json',import.meta.url));
 const {initializeApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
-const db=getFirestore(initializeApp({projectId:'demo-push-your-luck-service'}));
+const db=getFirestore(initializeApp({projectId:'demo-between-turns'}), 'push-your-luck');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const offer={id:'offer',reward:{id:'reward',name:'Prize',qualifyingRoll:'Use'}};
 async function setup(count=2){
@@ -34,5 +34,5 @@ test('undo racing another roll never reverses the later committed roll',async()=
 
 
 test('begin/connect bind the nonce and refuse a second grant exchange',async()=>{const s=await setup(1);const pending=await s.service.begin('valid-nonce');await assert.rejects(()=>s.service.connect(pending.credential,'wrong-nonce','grant'));const connected=await s.service.connect(pending.credential,'valid-nonce','grant');assert.equal(connected.playerId,'p0');await assert.rejects(()=>s.service.connect(pending.credential,'valid-nonce','grant'));});
-test('deployed Firestore rules reject direct browser reads and writes',async()=>{const base=`http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/demo-push-your-luck-service/databases/(default)/documents/races/browser-probe`;const read=await fetch(base);assert.equal(read.status,403);const write=await fetch(base,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{phase:{stringValue:'complete'}}})});assert.equal(write.status,403);});
+test('deployed Firestore rules reject direct browser reads and writes',async()=>{const base=`http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/demo-between-turns/databases/push-your-luck/documents/races/browser-probe`;const read=await fetch(base);assert.equal(read.status,403);const write=await fetch(base,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{phase:{stringValue:'complete'}}})});assert.equal(write.status,403);});
 test('stale bank and undo requests cannot apply to a newer roll from another tab',async()=>{const s=await setup(1);await s.service.command(s.credentials[0],{action:'roll',roll:8,requestId:'first'});await s.service.command(s.credentials[0],{action:'roll',roll:9,requestId:'second'});for(const action of ['bank','undo-roll'])await assert.rejects(()=>s.service.command(s.credentials[0],{action,expectedRollCount:1,requestId:action}),/new roll/);assert.equal((await s.ref.get()).get('rollCount'),2);assert.equal((await s.ref.get()).get('players.p0.atRisk'),17);});

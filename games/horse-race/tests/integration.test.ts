@@ -2,17 +2,17 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(new URL('../functions/package.json',import.meta.url));
-const {initializeApp}=require('firebase-admin/app');
+const {getApp,initializeApp}=require('firebase-admin/app');
 const {getFirestore}=require('firebase-admin/firestore');
 import {createHash,randomUUID} from 'node:crypto';
 import {RaceService} from '../functions/src/service';
 import {makeRace,syncMembers,type CentralContext,type Race} from '../functions/src/race';
 import type {IntegrationGateway} from '../functions/src/integration-gateway';
-import {HubService} from '../../between-turns/functions/src/service';
-import {MemoryStore} from '../../between-turns/tests/helpers';
-import {IntegratedRewards} from '../../rpg-rewards/functions/src/integrated-service';
+import {HubService} from '../../../apps/hub/functions/src/service';
+import {MemoryStore} from '../../../apps/hub/tests/helpers';
+import {IntegratedRewards} from '../../../apps/rpg-rewards/functions/src/integrated-service';
 if(!process.env.FIRESTORE_EMULATOR_HOST)throw Error('Integration tests require the local Firestore emulator.');
-initializeApp({projectId:'demo-horse-race'});const db=getFirestore();
+initializeApp({projectId:'demo-between-turns'});const db=getFirestore(getApp(), 'horse-race');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 async function setup(label:string,hits=0){
  label+='-'+randomUUID();
@@ -38,7 +38,7 @@ test('real hub and Rewards services record two tied awards, account ownership, h
  for(const playerId of ['b','c'])await hub.player(playerId,{action:'join',name:playerId.toUpperCase(),code:created.session.code,requestId:randomUUID()});
  store.data.set('identities/a',{accountId:'verified-google-account',displayName:'A',photoURL:null,version:1});
  const started:any=await hub.player('a',{action:'start',sessionId:created.session.id,requestId:randomUUID()});const sessionId=created.session.id,runId=started.session.run.id;
- const rewards=new IntegratedRewards(db,{
+ const rewards=new IntegratedRewards(getFirestore(getApp(), 'rpg-rewards'),{
   exchange:async(token,nonce)=>hub.game('rpg-rewards',{action:'exchange',token,nonce}) as any,
   context:async(s,p,r,g)=>hub.game('rpg-rewards',{action:'context',sessionId:s,playerId:p,...(r?{runId:r,gameId:g}: {})}) as any,
   activity:async(s,p,eventId)=>hub.game('rpg-rewards',{action:'activity',sessionId:s,playerId:p,eventId}),

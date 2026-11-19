@@ -1,0 +1,19 @@
+{
+  "name": "between-turns-monorepo",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "install:apps": "node scripts/project.mjs install",
+    "build": "node scripts/project.mjs build",
+    "test": "node --test scripts/project.test.mjs && node scripts/project.mjs test",
+    "test:integration": "node scripts/project.mjs integration",
+    "test:browser": "node scripts/project.mjs browser",
+    "verify:emulators": "node scripts/project.mjs verify",
+    "emulators": "node scripts/project.mjs emulators",
+    "deploy": "node scripts/project.mjs deploy",
+    "verify:browser": "node scripts/project.mjs verify-browser"
+  }
+}

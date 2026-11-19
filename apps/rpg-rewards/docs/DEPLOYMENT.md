@@ -1,5 +1,7 @@
 # Rewards deployment
 
+> Historical standalone deployment record. Use the [monorepo migration runbook](../../../docs/FIREBASE-MIGRATION.md) for production changes.
+
 November 1 Google-account release: updated functions and Hosting are deployed, the `awards.accountId` collection-group index is READY, and a real signed-in account's saved inventory was verified with its original award ID and no duplicate award records. Backend IAM remains private; embedded browser requests retain server-bound credential checks. See the sibling hub's `docs/RELEASE-2026-11-01-GOOGLE.md` for evidence and test limits.
 
 Build and verify locally before deploying. The integration updates were deployed to the existing three Firebase projects on November 1, 2026. Existing runtime identities were retained, scoped backend invocation was configured, and browser transport was verified.

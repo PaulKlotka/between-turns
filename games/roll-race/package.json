@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit && tsc -p functions/tsconfig.json --noEmit",
     "build": "npm run typecheck && npm --prefix functions run build && vite build",
     "test": "tsx --test tests/race.test.ts",
-    "test:integration": "tsx --test tests/integration.test.ts",
+    "test:integration": "tsx --test --test-concurrency=1 tests/integration.test.ts tests/cross-service.test.ts",
     "test:browser": "node tests/browser-check.cjs"
   },
   "devDependencies": {

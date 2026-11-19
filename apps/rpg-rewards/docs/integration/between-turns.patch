@@ -1,0 +1,108 @@
+diff --git a/shared/types.ts b/shared/types.ts
+index 8cd75fb..60e19c9 100644
+--- a/shared/types.ts
++++ b/shared/types.ts
+@@ -34,6 +34,6 @@ export type PlayerResponse = SessionView | Grant | null;
+ export interface ConnectionContext { version: 1; playerId: string; displayName: string; sessionId: string; runId: string | null; expiresAt: number; }
+ export type GameCommand =
+   | { action: 'exchange'; token: string; nonce: string }
+-  | { action: 'context'; sessionId: string; playerId: string; runId?: string }
++  | { action: 'context'; sessionId: string; playerId: string; runId?: string; gameId?: string }
+   | { action: 'activity'; sessionId: string; playerId: string; runId?: string; eventId: string }
+   | { action: 'complete'; sessionId: string; runId: string; eventId: string; winnerIds: string[]; rewardsReceipt: string };
+diff --git a/functions/src/service.ts b/functions/src/service.ts
+index aaaea17..979d631 100644
+--- a/functions/src/service.ts
++++ b/functions/src/service.ts
+@@ -207,7 +207,8 @@ export class HubService {
+       if (command.action === 'context') {
+         const member = await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
+         if (app.kind === 'game') assert(member.run?.gameId === appId && member.run.id === command.runId, 'permission-denied', 'Game instance is not active.');
+-        return this.context(member, command.playerId, app.kind);
++        if (app.kind === 'rewards' && command.runId) assert(member.phase === 'playing' && member.run?.id === command.runId && member.run.gameId === command.gameId, 'permission-denied', 'Game instance is not active.');
++        return this.context(member, command.playerId, command.runId ? 'game' : app.kind);
+       }
+       const eventId = id(command.eventId, 'Event ID');
+       const path = `receipts/${hash(`${appId}:${sid}:${eventId}`)}`;
+diff --git a/src/main.ts b/src/main.ts
+index 7dbe383..36aee28 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -31,9 +31,10 @@ $('#app').innerHTML = `
+     </section>
+     <section id="hub" hidden>
+       <div class="session-heading"><div><p class="eyebrow">YOUR PARTY, IN ONE PLACE</p><h1>Good company.<br><em>Great side quests.</em></h1></div><div class="session-chip"><span class="status-dot"></span><div><span class="eyebrow">SESSION CODE</span><strong id="header-code"></strong></div><button id="copy-code" class="icon-button" aria-label="Copy session code">⧉</button></div></div>
+-      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
++      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="reward-history">Session History</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
+       <section id="page-game" class="page" aria-label="Current Game"><div id="game-content"></div><div id="game-embed" hidden></div></section>
+       <section id="page-rewards" class="page" aria-label="My Rewards" hidden><div class="placeholder rewards-placeholder"><div class="placeholder-art reward-art">✧</div><p class="eyebrow">A LITTLE LUCK, WELL EARNED</p><h2>Your wins belong here.</h2><p>Rewards will travel with you from game to game.<br>They’re yours to use throughout this session.</p><span class="badge">Rewards integration coming soon</span><p class="fine-print">Your reward collection will appear when RPG Rewards is connected.</p></div></section>
++      <section id="page-reward-history" class="page" aria-label="Session History" hidden><p id="reward-history-note" class="muted">Session history appears when Rewards is connected and the session is active.</p><div id="reward-history-embed"></div></section>
+       <section id="page-session" class="page" aria-label="Session" hidden><div class="session-grid"><article class="panel invite-panel"><p class="eyebrow">MAKE ROOM AT THE TABLE</p><h2>Invite your party.</h2><p>Scan the QR code, share the link, or pass along your session code.</p><div class="invite-details"><img id="invite-qr" alt="QR code to join this session" width="168" height="168"><div><span class="eyebrow">SESSION CODE</span><strong id="invite-code"></strong><button id="copy-link" class="button secondary">Copy invite link ${arrow}</button></div></div><p class="fine-print" id="invite-note"></p></article><article class="panel roster-panel"><div class="panel-heading"><div><p class="eyebrow">THE PEOPLE MAKE THE PARTY</p><h2>At the table <span id="roster-count"></span></h2></div><span class="badge">All players equal</span></div><ul id="roster" class="roster"></ul><div class="session-bottom"><p id="expiry-note"></p><button id="leave-session" class="button quiet">Leave session ${arrow}</button></div><div id="leave-confirm" hidden><p>Leave this session? Joining again requires its invitation code.</p><button id="confirm-leave" class="button secondary">Leave session</button><button id="cancel-leave" class="button quiet">Stay here</button></div></article></div><article class="panel history-panel"><p class="eyebrow">THE STORY SO FAR</p><h2>Session results</h2><div id="history"></div></article></section>
+     </section>
+   </main><footer><span>BETWEEN TURNS</span><p>Made for the moments around the table.</p><span class="footer-mark">✧</span></footer>`;
+@@ -65,8 +66,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
+ });
+ function navigate(next: string) {
+   page = next;
+-  for (const value of ['game', 'rewards', 'session']) $(`#page-${value}`).hidden = value !== page;
++  if (view) renderRewards();
++  for (const value of ['game', 'rewards', 'reward-history', 'session']) $(`#page-${value}`).hidden = value !== page;
+   document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach(button => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
++  if (view) renderRewards();
+   updateGameLayout();
+ }
+ 
+@@ -138,13 +141,13 @@ function apply(next: SessionView | null) {
+ function renderRewards() {
+   if (!view) return;
+   const app = view.rewardsApp;
+-  const key = !view.expired && app ? `${view.session.id}:${app.embedUrl}` : '';
++  const key = !view.expired && app ? `${view.session.id}:${app.embedUrl}:${page === 'reward-history' ? 'history' : 'inventory'}` : '';
+   if (key === rewardsKey) return;
+   disposeRewards?.(); disposeRewards = undefined; rewardsKey = key;
+   const host = document.getElementById('rewards-embed') || Object.assign(document.createElement('div'), { id: 'rewards-embed' });
+-  $('#page-rewards').append(host);
+-  const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
+-  if (key && app) disposeRewards = embed.mountEmbed(host, { url: app.embedUrl, appId: app.id, sessionId: view.session.id, title: 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
++  (page === 'reward-history' ? $('#reward-history-embed') : $('#page-rewards')).append(host);
++  $('#reward-history-note').hidden = !!key; const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
++  if (key && app) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl); url.searchParams.set('view', page === 'reward-history' ? 'history' : 'inventory'); return url.href; })(), appId: app.id, sessionId: view.session.id, title: page === 'reward-history' ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
+   host.hidden = !key;
+ }
+ function renderGame() {
+diff --git a/src/embed.ts b/src/embed.ts
+index 2e3877e..c21371f 100644
+--- a/src/embed.ts
++++ b/src/embed.ts
+@@ -35,7 +35,7 @@ export function mountEmbed(host: HTMLElement, options: { url: string; appId: str
+   const timeout = window.setTimeout(() => { if (!connected) options.report(`${options.title} is taking longer than expected to connect. Try refreshing the page.`); }, 20_000);
+   const onMessage = async (event: MessageEvent) => {
+     if (!acceptsEmbedMessage(event, url.origin, frame.contentWindow, nonce) || disposed) return;
+-    if (event.data.type === 'ready' && !connecting && !connected) {
++    if (event.data.type === 'ready' && !connecting) {
+       connecting = true;
+       try {
+         const grant = await command({ action: 'connect', appId: options.appId, sessionId: options.sessionId, ...(options.runId ? { runId: options.runId } : {}), nonce }) as Grant;
+diff --git a/src/style.css b/src/style.css
+index 4ff4f31..dbec5fb 100644
+--- a/src/style.css
++++ b/src/style.css
+@@ -29,3 +29,5 @@
+ }
+ @media(max-width:700px){.intro h1 br:nth-of-type(1){display:block}}
+ @media(max-width:360px){.intro h1{font-size:48px;letter-spacing:-1.7px}.entry-number{display:none}.invite-details{flex-wrap:wrap}}
++
++#rewards-embed .game-frame{min-height:70vh;width:100%;border:0}.navigation{flex-wrap:wrap}
+diff --git a/firebase.json b/firebase.json
+index b34bf87..94ceac0 100644
+--- a/firebase.json
++++ b/firebase.json
+@@ -8,7 +8,7 @@
+       { "key": "X-Content-Type-Options", "value": "nosniff" },
+       { "key": "Referrer-Policy", "value": "no-referrer" },
+       { "key": "Cache-Control", "value": "no-cache" },
+-      { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com https://recaptcha.google.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://*.firebaseapp.com; frame-src https://www.google.com https://recaptcha.google.com; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" }
++      { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com https://recaptcha.google.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://*.firebaseapp.com; frame-src https://www.google.com https://recaptcha.google.com https://rpg-rewards-paul.web.app https://rpg-bingo-paul.web.app; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" }
+     ] }]
+   },
+   "emulators": {

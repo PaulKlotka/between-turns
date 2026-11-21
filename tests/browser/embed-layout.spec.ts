@@ -5,7 +5,7 @@ test('embedded game fits desktop viewports and survives navigation without clipp
   const now = Date.now();
   const view: SessionView = {
     playerId: 'alice', expired: false, serverNow: now, rewardsApp: null,
-    games: [{ id: 'bingo', name: 'RPG Bingo', description: 'Bingo', ready: true, embedUrl: 'https://game.example/embed' }],
+    games: [{ id: 'bingo', name: 'Bingo', description: 'Bingo', ready: true, embedUrl: 'https://game.example/embed' }],
     session: { id: 'session', code: 'ABCDEF123456789', phase: 'playing', createdAt: now, activityAt: now,
       expiresAt: now + 86400000, members: [{ id: 'alice', name: 'Alice', connected: true }],
       ballot: null, run: { id: 'run', gameId: 'bingo', startedAt: now }, history: [], revision: 1 },

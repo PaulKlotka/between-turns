@@ -23,24 +23,45 @@ function saved(key: string) { try { return localStorage.getItem(key) || ''; } ca
 function save(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Firebase also reports persistence failures. */ } }
 
 $('#app').innerHTML = `
-  <header class="header"><a class="brand" href="/" aria-label="Between Turns home"><span class="brand-die">${die}</span><span>BETWEEN<span class="brand-second">TURNS</span></span></a><div class="header-right"><span id="environment"></span><span id="account-label" class="guest"><span class="status-dot"></span> Guest player</span><button id="google-sign-in" class="button secondary" disabled>Sign in with Google</button><button id="open-rewards" class="button quiet" hidden>My Rewards</button><button id="google-sign-out" class="button quiet" hidden>Sign out</button></div></header>
+  <header class="header"><a class="brand" href="/" aria-label="Between Turns home"><span class="brand-die">${die}</span><span>BETWEEN<span class="brand-second">TURNS</span></span></a><div class="header-right"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode"></button><span id="environment"></span><span id="account-label" class="guest"><span class="status-dot"></span> Guest player</span><button id="google-sign-in" class="button secondary" disabled>Sign in with Google</button><button id="open-rewards" class="button quiet" hidden>My Rewards</button><button id="open-reward-lists" class="button quiet" hidden>Reward Lists</button><button id="google-sign-out" class="button quiet" hidden>Sign out</button></div></header>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <div id="connection" class="connection" role="status">Connecting your guest identity…</div>
   <main>
     <section id="welcome" class="welcome" hidden>
       <div class="intro"><p class="eyebrow"><span class="tiny-line"></span> A LITTLE MORE ADVENTURE</p><h1>The adventure<br>between<br><em>adventures.</em></h1><p class="lede">Keep the table together. Jump into a game,<br class="desktop-break"> collect a little luck, and make every turn count.</p><div class="intro-foot"><span class="mini-die">${die}</span><p>ONE PARTY. EVERY GAME.<br><span>No signup. Just your name and your people.</span></p></div></div>
-      <div class="entry-wrap"><div class="entry-top"><span class="eyebrow">YOUR NEXT SESSION</span><span class="entry-number">01 / JOIN THE TABLE</span></div><div class="entry-card"><div class="entry-tabs" role="tablist" aria-label="Session action"><button id="create-tab" role="tab" data-mode="create">Create a session</button><button id="join-tab" role="tab" data-mode="join">Join a session</button></div><div class="entry-copy"><h2 id="entry-title"></h2><p id="entry-description"></p></div><form id="entry-form"><label for="player-name">What should we call you?</label><input id="player-name" name="name" maxlength="40" required autocomplete="nickname" placeholder="Your player name"><div id="code-field"><label for="session-code">Session code</label><input id="session-code" name="code" maxlength="32" placeholder="Your party’s 15-character code" autocomplete="off" spellcheck="false"></div><p class="field-note">Your name is unique at this table.</p><button class="button primary full" id="entry-submit" type="submit" disabled></button></form><div class="entry-bottom"><span class="status-dot"></span><span>Guest access · Sessions last 24 hours after activity</span></div></div><div class="next-up"><span class="next-icon">✧</span><div><span class="eyebrow">FIRST IN THE LINEUP</span><p>RPG Bingo <span>· Integration coming soon</span></p></div></div></div>
+      <div class="entry-wrap"><div class="entry-top"><span class="eyebrow">YOUR NEXT SESSION</span><span class="entry-number">01 / JOIN THE TABLE</span></div><div class="entry-card"><div class="entry-tabs" role="tablist" aria-label="Session action"><button id="create-tab" role="tab" data-mode="create">Create a session</button><button id="join-tab" role="tab" data-mode="join">Join a session</button></div><div class="entry-copy"><h2 id="entry-title"></h2><p id="entry-description"></p></div><form id="entry-form"><label for="player-name">What should we call you?</label><input id="player-name" name="name" maxlength="40" required autocomplete="nickname" placeholder="Your player name"><div id="code-field"><label for="session-code">Session code</label><input id="session-code" name="code" maxlength="32" placeholder="Your party’s 15-character code" autocomplete="off" spellcheck="false"></div><p class="field-note">Your name is unique at this table.</p><button class="button primary full" id="entry-submit" type="submit" disabled></button></form><div class="entry-bottom"><span class="status-dot"></span><span>Guest access · Sessions last 24 hours after activity</span></div></div><div class="next-up"><span class="next-icon">✧</span><div><span class="eyebrow">FIRST IN THE LINEUP</span><p>Bingo <span>· Integration coming soon</span></p></div></div></div>
     </section>
     <section id="hub" hidden>
       <div class="session-heading"><div><p class="eyebrow">YOUR PARTY, IN ONE PLACE</p><h1>Good company.<br><em>Great side quests.</em></h1></div><div class="session-chip"><span class="status-dot"></span><div><span class="eyebrow">SESSION CODE</span><strong id="header-code"></strong></div><button id="copy-code" class="icon-button" aria-label="Copy session code">⧉</button></div></div>
-      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="reward-history">Session History</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
+      <div class="hub-bar"><nav class="navigation" aria-label="Main navigation"><button data-page="game" aria-current="page">Current Game</button><button data-page="rewards">My Rewards</button><button data-page="reward-lists">Reward Lists</button><button data-page="reward-history">Session History</button><button data-page="session">Session <span id="member-count" class="count"></span></button></nav><span id="player-label" class="player-label"></span></div>
       <section id="page-game" class="page" aria-label="Current Game"><div id="game-content"></div><div id="game-embed" hidden></div></section>
       <section id="page-rewards" class="page" aria-label="My Rewards" hidden><div class="placeholder rewards-placeholder"><div class="placeholder-art reward-art">✧</div><p class="eyebrow">A LITTLE LUCK, WELL EARNED</p><h2>Your wins belong here.</h2><p>Rewards will travel with you from game to game.<br>They’re yours to use throughout this session.</p><span class="badge">Rewards integration coming soon</span><p class="fine-print">Your reward collection will appear when RPG Rewards is connected.</p></div></section>
+      <section id="page-reward-lists" class="page" aria-label="Reward Lists" hidden><p id="reward-lists-note">Reward Lists will appear when RPG Rewards is connected.</p><div id="reward-lists-embed"></div></section>
       <section id="page-reward-history" class="page" aria-label="Session History" hidden><p id="reward-history-note" class="muted">Session history appears when Rewards is connected and the session is active.</p><div id="reward-history-embed"></div></section>
       <section id="page-session" class="page" aria-label="Session" hidden><div class="session-grid"><article class="panel invite-panel"><p class="eyebrow">MAKE ROOM AT THE TABLE</p><h2>Invite your party.</h2><p>Scan the QR code, share the link, or pass along your session code.</p><div class="invite-details"><img id="invite-qr" alt="QR code to join this session" width="168" height="168"><div><span class="eyebrow">SESSION CODE</span><strong id="invite-code"></strong><button id="copy-link" class="button secondary">Copy invite link ${arrow}</button></div></div><p class="fine-print" id="invite-note"></p></article><article class="panel roster-panel"><div class="panel-heading"><div><p class="eyebrow">THE PEOPLE MAKE THE PARTY</p><h2>At the table <span id="roster-count"></span></h2></div><span class="badge">All players equal</span></div><ul id="roster" class="roster"></ul><div class="session-bottom"><p id="expiry-note"></p><button id="leave-session" class="button quiet">Leave session ${arrow}</button></div><div id="leave-confirm" hidden><p>Leave this session? Joining again requires its invitation code.</p><button id="confirm-leave" class="button secondary">Leave session</button><button id="cancel-leave" class="button quiet">Stay here</button></div></article></div><article class="panel history-panel"><p class="eyebrow">THE STORY SO FAR</p><h2>Session results</h2><div id="history"></div></article></section>
     </section>
     <section id="saved-rewards" class="panel" hidden><h2>My Rewards</h2><p>Your account rewards stay with you after sessions end.</p><div id="saved-rewards-host"></div><p id="saved-rewards-note">Rewards is waiting to connect.</p></section>
   </main><footer><span>BETWEEN TURNS</span><p>Made for the moments around the table.</p><span class="footer-mark">✧</span></footer>`;
+
+
+const sun = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>';
+const moon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg>';
+function renderThemeToggle() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const button = $('#theme-toggle');
+  button.innerHTML = dark ? sun : moon;
+  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  button.setAttribute('aria-label', label);
+  button.title = label;
+}
+$('#theme-toggle').onclick = () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  save('bt-theme', theme);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#302337' : '#F5EFE3');
+  renderThemeToggle();
+};
+renderThemeToggle();
 
 function avatar(name: string, photoURL?: string | null) {
   const safePhoto = photoURL && /^https:\/\/[^/]+\.googleusercontent\.com\//.test(photoURL);
@@ -52,6 +73,7 @@ function renderIdentity() {
   $('#google-sign-in').hidden = identity.signedIn;
   $('#google-sign-out').hidden = !identity.signedIn;
   $('#open-rewards').hidden = !identity.signedIn || !!view;
+  $('#open-reward-lists').hidden = !identity.signedIn || !!view;
   const input = $<HTMLInputElement>('#player-name');
   input.hidden = identity.signedIn; input.required = !identity.signedIn;
   $('label[for="player-name"]').hidden = identity.signedIn;
@@ -83,7 +105,9 @@ async function changeIdentity(signingIn: boolean) {
 }
 $('#google-sign-in').onclick = () => void changeIdentity(true);
 $('#google-sign-out').onclick = () => void changeIdentity(false);
-$('#open-rewards').onclick = () => { walletOpen = true; if (view) navigate('rewards'); renderRewards(); $('#saved-rewards').scrollIntoView({ block: 'nearest' }); };
+$('#open-rewards').onclick = () => { page = 'rewards'; walletOpen = true; if (view) navigate('rewards'); renderRewards(); $('#saved-rewards').scrollIntoView({ block: 'nearest' }); };
+
+$('#open-reward-lists').onclick = () => { walletOpen = true; page = 'reward-lists'; if (view) navigate(page); renderRewards(); $('#saved-rewards').scrollIntoView({ block: 'nearest' }); };
 
 $('#player-name').setAttribute('value', saved('bt-name'));
 const query = new URLSearchParams(location.search);
@@ -113,7 +137,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => {
 function navigate(next: string) {
   page = next;
   if (view) renderRewards();
-  for (const value of ['game', 'rewards', 'reward-history', 'session']) $(`#page-${value}`).hidden = value !== page;
+  for (const value of ['game', 'rewards', 'reward-lists', 'reward-history', 'session']) $(`#page-${value}`).hidden = value !== page;
   document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach(button => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
   if (view) renderRewards();
   updateGameLayout();
@@ -165,6 +189,7 @@ function disable() {
 function apply(next: SessionView | null) {
   const oldId = view?.session.id; view = next;
   $('#open-rewards').hidden = !identity.signedIn || !!view;
+  $('#open-reward-lists').hidden = !identity.signedIn || !!view;
   if (view) clockOffset = view.serverNow - Date.now();
   if (oldId !== view?.session.id) { inviteCode = ''; $('#leave-confirm').hidden = true; $('#leave-session').hidden = false; navigate('game'); }
   const joiningAnother = !!view && invitationPending && view.session.code !== query.get('join')?.replace(/[\s-]/g, '').toUpperCase();
@@ -190,18 +215,23 @@ function apply(next: SessionView | null) {
 }
 function renderRewards() {
   const historyView = page === 'reward-history' && !!view;
+  const listsView = page === 'reward-lists';
+  const rewardsView = listsView ? 'lists' : historyView ? 'history' : 'inventory';
+  $('#saved-rewards h2').textContent = listsView ? 'Reward Lists' : 'My Rewards';
+  $('#saved-rewards > p').textContent = listsView ? 'Build reward lists for the RPGs you play.' : 'Your account rewards stay with you after sessions end.';
   const app = view?.rewardsApp ?? identity.rewardsApp;
   const sessionId = view && !view.expired ? view.session.id : '';
   const available = !!sessionId || (identity.signedIn && !historyView && (!!view || walletOpen));
   $('#saved-rewards').hidden = !!view || !identity.signedIn || !walletOpen;
-  const key = available && app?.embedUrl ? `${sessionId}:${identity.playerId || 'guest'}:${app.embedUrl}:${historyView ? 'history' : 'inventory'}` : '';
+  const key = available && app?.embedUrl ? `${sessionId}:${identity.playerId || 'guest'}:${app.embedUrl}:${rewardsView}` : '';
   if (key === rewardsKey) return;
   disposeRewards?.(); disposeRewards = undefined; rewardsKey = key;
   const host = document.getElementById('rewards-embed') || Object.assign(document.createElement('div'), { id: 'rewards-embed' });
-  (!view ? $('#saved-rewards-host') : historyView ? $('#reward-history-embed') : $('#page-rewards')).append(host);
+  (!view ? $('#saved-rewards-host') : listsView ? $('#reward-lists-embed') : historyView ? $('#reward-history-embed') : $('#page-rewards')).append(host);
+  $('#reward-lists-note').hidden = !!key;
   $('#reward-history-note').hidden = !!key; const placeholder = $('#page-rewards .placeholder'); placeholder.hidden = !!key;
   $('#saved-rewards-note').hidden = !!key;
-  if (key && app?.embedUrl) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl!); url.searchParams.set('view', historyView ? 'history' : 'inventory'); return url.href; })(), appId: app.id, sessionId, title: historyView ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
+  if (key && app?.embedUrl) disposeRewards = embed.mountEmbed(host, { url: (() => { const url = new URL(app.embedUrl!); url.searchParams.set('view', rewardsView); return url.href; })(), appId: app.id, sessionId, title: listsView ? 'Reward Lists' : historyView ? 'Session History' : 'My Rewards', refresh: () => { void poll(); }, report: message => notice(message, true) });
   host.hidden = !key;
 }
 function renderGame() {
@@ -216,7 +246,6 @@ function renderGame() {
     const b = s.ballot; const voted = b.votes[view.playerId]; const eligible = b.eligible.includes(view.playerId);
     html = `<div class="vote-heading"><div><p class="eyebrow">THE PARTY DECIDES</p><h2>What’s our next adventure?</h2><p>${voted ? 'Your vote is in. Waiting for the party.' : eligible ? 'Pick one game. The most votes wins.' : 'Voting was already underway when you joined. You’ll enter the selected game.'}</p></div><div class="vote-timer"><strong id="vote-seconds"></strong><span>SECONDS LEFT</span></div></div><div class="vote-options">${b.options.map(gameId => { const item = view!.games.find(g => g.id === gameId)!; const count = b.eligible.filter(uid => b.votes[uid] === gameId).length; return `<button class="vote-option ${voted === gameId ? 'selected' : ''}" data-vote="${escape(gameId)}" ${voted || !eligible ? 'data-unavailable="true" disabled' : ''}><span class="vote-icon">${die}</span><h3>${escape(item?.name || gameId)}</h3><p>${escape(item?.description || '')}</p><span class="vote-count">${voted === gameId ? '✓ Your vote · ' : ''}${count} ${count === 1 ? 'vote' : 'votes'}</span></button>`; }).join('')}</div><p class="vote-foot">${b.eligible.filter(uid => b.votes[uid]).length} of ${b.eligible.length} players voted · Ties are settled at random</p>`;
   } else if (s.phase === 'playing' && game?.ready && game.embedUrl) {
-    html = `<div class="playing-heading"><div><p class="eyebrow">EVERYONE’S IN</p><h2>${escape(game.name)}</h2></div><span class="badge"><span class="status-dot"></span> Playing together</span></div>`;
     key = `${s.id}:${s.run!.id}`;
   } else html = `<div class="placeholder"><div class="placeholder-art">${die}</div><h2>This game is waiting to connect.</h2><p>Your shared session is ready. The game integration is not available yet.</p><span class="badge">Integration coming soon</span></div>`;
   paint('#game-content', html);

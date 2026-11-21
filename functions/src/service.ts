@@ -1,3 +1,4 @@
+import { GENERAL_REWARD_LIST } from '../../shared/reward-lists';
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { GAMES, MAX_MEMBERS, PRESENCE_TTL, SESSION_TTL, VERSION, VOTE_DURATION, type Ballot, type ConnectionContext, type Game, type GameCommand, type Grant, type PlayerCommand, type PlayerResponse, type Session, type SessionView } from '../../shared/types';
 import { assert } from './errors';
@@ -35,7 +36,7 @@ export class HubService {
   private view(s: Session, uid: string, now: number): SessionView {
     const { members, ...session } = s;
     const rewards = this.apps.find(a => a.kind === 'rewards' && a.embedUrl);
-    return { session: { ...session, members: Object.values(members).map(m => ({ id: m.id, name: m.name, photoURL: m.photoURL ?? null, connected: connected(s, m.id, now) })) }, playerId: uid, expired: !active(s, now), serverNow: now, games: this.games, rewardsApp: rewards?.embedUrl ? { id: rewards.id, embedUrl: rewards.embedUrl } : null };
+    return { session: { ...session, selectedRewardList: session.selectedRewardList ?? GENERAL_REWARD_LIST, members: Object.values(members).map(m => ({ id: m.id, name: m.name, photoURL: m.photoURL ?? null, connected: connected(s, m.id, now) })) }, playerId: uid, expired: !active(s, now), serverNow: now, games: this.games, rewardsApp: rewards?.embedUrl ? { id: rewards.id, embedUrl: rewards.embedUrl } : null };
   }
   private save(tx: Transaction, s: Session) { s.revision++; tx.set(`sessions/${s.id}`, s); }
   private select(s: Session, now: number, initiator?: string) {
@@ -48,7 +49,7 @@ export class HubService {
     s.ballot = { id: randomUUID(), options, eligible: Object.keys(s.members).filter(uid => connected(s, uid, now) || uid === initiator), votes: {}, openedAt: now, closesAt: now + VOTE_DURATION };
   }
   private startRun(s: Session, gameId: string, now: number) {
-    s.run = { id: randomUUID(), gameId, startedAt: now }; s.phase = 'playing'; s.ballot = null;
+    s.run = { id: randomUUID(), gameId, startedAt: now, rewardList: s.selectedRewardList ?? GENERAL_REWARD_LIST }; s.phase = 'playing'; s.ballot = null;
   }
   private settle(s: Session, now: number): boolean {
     const b = s.ballot;
@@ -228,6 +229,10 @@ export class HubService {
       assert('sessionId' in command, 'invalid-argument', 'Unknown integration command.');
       const sid = id(command.sessionId, 'Session ID');
       const s = await tx.get<Session>(`sessions/${sid}`);
+      if (command.action === 'rewardSessionStatus') {
+        assert(app.kind === 'rewards', 'permission-denied', 'Only Rewards may inspect session retention.');
+        return { active: !!s && active(s, now), expiresAt: s?.expiresAt ?? 0 };
+      }
       assert(s && active(s, now), 'failed-precondition', 'Session has expired or closed.');
       if (command.action === 'context') {
         const member = await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
@@ -239,7 +244,17 @@ export class HubService {
       const path = `receipts/${hash(`${appId}:${sid}:${eventId}`)}`;
       const prior = await tx.get<Receipt>(path); const fp = fingerprint(command);
       if (prior) { assert(prior.fingerprint === fp, 'already-exists', 'Event ID already used with different data.'); return { accepted: true }; }
-      if (command.action === 'activity') {
+      if (command.action === 'selectRewardList') {
+        assert(app.kind === 'rewards', 'permission-denied', 'Only Rewards may select a reward list.');
+        await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
+        const identity = await tx.get<AccountProfile>(`identities/${command.playerId}`);
+        assert((identity?.accountId ?? null) === command.accountId, 'unauthenticated', 'Identity changed. Reconnect Rewards.');
+        const list = command.rewardList;
+        assert(list && typeof list === 'object', 'invalid-argument', 'A reward list is required.');
+        id(list.snapshotId, 'Snapshot ID'); id(list.sourceListId, 'Source list ID');
+        text(list.rpgId, 'RPG ID', 200); text(list.rpgName, 'RPG name', 100); text(list.listName, 'List name', 100);
+        s.selectedRewardList = { snapshotId: list.snapshotId, sourceListId: list.sourceListId, rpgId: list.rpgId, rpgName: list.rpgName, listName: list.listName };
+      } else if (command.action === 'activity') {
         await this.session(tx, id(command.playerId, 'Player ID'), sid, now);
         if (app.kind === 'game') assert(s.phase === 'playing' && s.run?.gameId === appId && s.run.id === command.runId, 'permission-denied', 'Game instance is not active.');
       } else if (command.action === 'complete') {
@@ -255,7 +270,7 @@ export class HubService {
     });
   }
   private context(s: Session, uid: string, kind: RegisteredApp['kind'], identity: AccountProfile | null = null): ConnectionContext {
-    return { version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt };
+    return { selectedRewardList: s.selectedRewardList ?? GENERAL_REWARD_LIST, rewardList: s.run ? s.run.rewardList ?? GENERAL_REWARD_LIST : s.selectedRewardList ?? GENERAL_REWARD_LIST, version: VERSION, playerId: uid, displayName: s.members[uid].name, photoURL: s.members[uid].photoURL ?? null, accountId: identity?.accountId ?? null, sessionId: s.id, runId: kind === 'game' ? s.run?.id ?? null : null, expiresAt: s.expiresAt, memberCount: Object.keys(s.members).length, connectedCount: Object.keys(s.members).filter(id => connected(s, id, this.now())).length, members: Object.values(s.members).map(m => ({ id: m.id, name: m.name, connected: connected(s, m.id, this.now()) })) };
   }
   async settleSession(sessionId: string) {
     return this.store.transaction(async tx => {
